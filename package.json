@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "watch": "clasp push --watch",
+    "open": "clasp open"
+  }
+}
