@@ -1,4 +1,7 @@
-// Helper chuẩn hóa header key: chữ thường, bỏ dấu tiếng Việt, bỏ toàn bộ khoảng trắng và ký tự đặc biệt
+/**
+ * src/probation-review/probation-review.config.js
+ * Cấu hình độc lập cho module Probation Review
+ */
 function normalizeHeaderKey(str) {
   if (!str) return "";
   return String(str)
@@ -12,22 +15,15 @@ function normalizeHeaderKey(str) {
 const PROBATION_REVIEW_CONFIG = {
   DAYS_BEFORE_STOP: 15,
   TIMEZONE: "Asia/Ho_Chi_Minh",
-
-  // Metadata key prefix để khóa dòng chống gửi lặp (không chèn cột mới vào sheet)
   METADATA_KEY_PREFIX: "PROBATION_REVIEW",
 
-  // =========================================================================
-  // 1. SHEET UC05 (Bảng điều khiển & kích hoạt: Progress Tracking / Contract Tracking)
-  // URL: https://docs.google.com/spreadsheets/d/1oAzOciyfA_b91aPz14jN-O-crGLyqoegBGFwurbggLA/edit?gid=0#gid=0
-  // =========================================================================
+  // 1. SHEET UC05 (Bảng điều khiển: Progress Tracking / Contract Tracking)
   PROGRESS_TRACKING: {
     SPREADSHEET_ID: "1oAzOciyfA_b91aPz14jN-O-crGLyqoegBGFwurbggLA",
     TAB_NAME: "Contract Tracking",
     TAB_GID: "0",
-    HEADER_ROW_INDEX: 1, // Dòng 1 trên Sheet là tên cột
-    DATA_START_ROW_INDEX: 2, // Dữ liệu bắt đầu từ Dòng 2
-
-    // Toàn bộ các cột trên UC05
+    HEADER_ROW_INDEX: 1,
+    DATA_START_ROW_INDEX: 2,
     COLS: {
       CODE: normalizeHeaderKey("Code"),
       FULL_NAME: normalizeHeaderKey("Full name"),
@@ -46,17 +42,12 @@ const PROBATION_REVIEW_CONFIG = {
     },
   },
 
-  // =========================================================================
-  // 2. SHEET ONBOARDING (Bảng hồ sơ gốc & Folder OKRs: Hera | UC03 Dev)
-  // URL: https://docs.google.com/spreadsheets/d/1rnowvvOuOJ_5i9zDrz_1-TigNq_EZMY02nnOGbGQgTE/edit?gid=335034815#gid=335034815
-  // =========================================================================
+  // 2. SHEET ONBOARDING (Bảng hồ sơ gốc: Hera | UC03 Dev)
   ONBOARDING: {
     SPREADSHEET_ID: "1rnowvvOuOJ_5i9zDrz_1-TigNq_EZMY02nnOGbGQgTE",
     TAB_GID: "335034815",
-    HEADER_ROW_INDEX: 1, // Dòng 1 trên Sheet là tên cột
-    DATA_START_ROW_INDEX: 3, // Dòng 3 trên Sheet bắt đầu có dữ liệu (Dòng 2 là số thứ tự cột 1, 2, 3...)
-
-    // Toàn bộ các cột trên Onboarding Sheet (UC03)
+    HEADER_ROW_INDEX: 1,
+    DATA_START_ROW_INDEX: 3,
     COLS: {
       FULL_NAME: normalizeHeaderKey("Full Name"),
       ACCENTLESS_FULL_NAME: normalizeHeaderKey("Accentless Full Name"),
@@ -96,7 +87,7 @@ const PROBATION_REVIEW_CONFIG = {
   },
 
   EMAIL: {
-    TEMPLATE_NAME: "[Official] Hera | Email Template",
+    PEOPLE_TEAM_EMAIL: "people@kyanon.digital",
     DEFAULT_DOMAIN: "@kyanon.digital",
   },
 };

@@ -6,6 +6,17 @@
 
 class ProbationReviewService {
   /**
+   * Helper: Chuẩn hóa nhãn loại Review từ Employment Type
+   * Ví dụ: "Intern" -> "Intern", "Probation" -> "Probation", "Apprentice" -> "Apprentice"
+   */
+  static resolveReviewTypeLabel_(empTypeRaw, contractTypeRaw) {
+    const raw = `${empTypeRaw || ""} ${contractTypeRaw || ""}`.toLowerCase();
+    if (raw.includes("intern")) return "Intern";
+    if (raw.includes("apprentice")) return "Apprentice";
+    return "Probation"; // Mặc định là Probation
+  }
+
+  /**
    * 1. Đọc Onboarding Sheet (UC03) về RAM Map tra cứu O(1)
    */
   static loadOnboardingDataMap_() {
@@ -35,6 +46,12 @@ class ProbationReviewService {
       oConfig.COLS.STOP_PROBATION_INTERN_DATE,
     );
     const okrFolderIdx = headers.indexOf(oConfig.COLS.LINK_FOLDER_OKRS);
+    const titleIdx = headers.indexOf(oConfig.COLS.TITLE);
+    const squadIdx = headers.indexOf(oConfig.COLS.SQUAD_UNIT);
+    const tribeIdx = headers.indexOf(oConfig.COLS.TRIBE_DIVISION);
+    const lmIdx = headers.indexOf(oConfig.COLS.LINE_MANAGER);
+    const dlmIdx = headers.indexOf(oConfig.COLS.DOT_LINE_MANAGER);
+    const empTypeIdx = headers.indexOf(oConfig.COLS.EMPLOYMENT_TYPE);
 
     const byEmail = new Map();
     const byName = new Map();
@@ -49,6 +66,23 @@ class ProbationReviewService {
       const workingEmail = ProbationReviewUtil.cleanEmail(row[workingEmailIdx]);
       const stopProbationDate = row[stopDateIdx];
       const okrFolderUrl = String(row[okrFolderIdx] || "").trim();
+      const title = String(row[titleIdx] || "").trim();
+      const squad = String(row[squadIdx] || "").trim();
+      const tribe = String(row[tribeIdx] || "").trim();
+      const lineManager = ProbationReviewUtil.cleanEmail(row[lmIdx]);
+      const dotLineManager = ProbationReviewUtil.cleanEmail(row[dlmIdx]);
+      const employmentType = String(row[empTypeIdx] || "").trim();
+
+      // Xử lý chống trùng lặp tên nếu squad và tribe giống hệt nhau
+      let squadTribe = "";
+      if (squad && tribe) {
+        squadTribe =
+          squad.toLowerCase() === tribe.toLowerCase()
+            ? squad
+            : `${squad} / ${tribe}`;
+      } else {
+        squadTribe = squad || tribe || "";
+      }
 
       const record = {
         fullName: fullName,
@@ -59,6 +93,11 @@ class ProbationReviewService {
         stopProbationDisplayDate:
           ProbationReviewUtil.formatDisplayDate(stopProbationDate),
         okrFolderUrl: okrFolderUrl,
+        title: title,
+        squadTribe: squadTribe,
+        lineManager: lineManager,
+        dotLineManager: dotLineManager,
+        employmentType: employmentType,
       };
 
       if (personalEmail) byEmail.set(personalEmail, record);
@@ -70,7 +109,7 @@ class ProbationReviewService {
   }
 
   /**
-   * 2. Bốc file OKR từ Google Drive Folder (Google Sheet/Doc -> PDF, hoặc file tĩnh)
+   * 2. Bốc file OKR từ Google Drive Folder
    */
   static getOkrAttachmentFromFolder_(folderUrl) {
     if (!folderUrl) return null;
@@ -109,15 +148,20 @@ class ProbationReviewService {
 
   /**
    * 3. Chạy luồng quét đối soát và gửi mail / tạo draft
-   * Khóa dòng Developer Metadata trực tiếp trên Sheet UC05 (Contract Tracking)
    * @param {"draft"|"send"} mode
-   * @returns {Object} Plain JSON Result
    */
   static runProbationReview(mode = "draft") {
     const tConfig = PROBATION_REVIEW_CONFIG.PROGRESS_TRACKING;
     const metaPrefix = PROBATION_REVIEW_CONFIG.METADATA_KEY_PREFIX;
     const timeZone = PROBATION_REVIEW_CONFIG.TIMEZONE;
     const todayKey = ProbationReviewUtil.formatDateKey(new Date(), timeZone);
+    const currentUserEmail = Session.getActiveUser().getEmail();
+    const senderName = currentUserEmail
+      ? currentUserEmail
+          .split("@")[0]
+          .replace(".", " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+      : "Talent Development Team";
 
     // 1. Tải dữ liệu Onboarding vào RAM Map
     const { byEmail, byName } = this.loadOnboardingDataMap_();
@@ -136,7 +180,7 @@ class ProbationReviewService {
       };
     }
 
-    // 3. Tải toàn bộ Developer Metadata của Sheet UC05 về RAM Set O(1)
+    // 3. Tải Developer Metadata của UC05 về RAM Set O(1)
     const lockedMetadataSet = new Set();
     try {
       const allMetaUC05 = sheetUC05.getDeveloperMetadata();
@@ -154,9 +198,9 @@ class ProbationReviewService {
 
     const headers =
       dataUC05[tConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
-    const codeIdx = headers.indexOf(tConfig.COLS.CODE);
     const nameIdx = headers.indexOf(tConfig.COLS.FULL_NAME);
     const picIdx = headers.indexOf(tConfig.COLS.PIC);
+    const contractTypeIdx = headers.indexOf(tConfig.COLS.TYPE_OF_CONTRACT);
     const startProcessIdx = headers.indexOf(tConfig.COLS.HR_OPS_START_PROCESS);
     const candidateEmailIdx = headers.indexOf(tConfig.COLS.CANDIDATE_EMAIL);
 
@@ -174,39 +218,40 @@ class ProbationReviewService {
     // 4. Quét từng dòng dữ liệu trên UC05
     for (let r = startRow; r < dataUC05.length; r++) {
       const row = dataUC05[r];
-      const sheetRowNumberUC05 = r + 1; // Số thứ tự dòng 1-indexed trên UC05
+      const sheetRowNumberUC05 = r + 1;
       const rawName = String(row[nameIdx] || "").trim();
       const rawEmail = String(row[candidateEmailIdx] || "")
         .trim()
         .toLowerCase();
       const rawStartProcess = row[startProcessIdx];
       const rawPic = String(row[picIdx] || "").trim();
+      const rawContractType = String(row[contractTypeIdx] || "").trim();
 
       if (!rawName) continue;
 
       // Tra cứu chéo sang Onboarding: ưu tiên Email nếu có, fallback sang Họ Tên
       let onboardingInfo = null;
-      if (rawEmail) {
-        onboardingInfo = byEmail.get(rawEmail);
-      }
-      if (!onboardingInfo && rawName) {
+      if (rawEmail) onboardingInfo = byEmail.get(rawEmail);
+      if (!onboardingInfo && rawName)
         onboardingInfo = byName.get(rawName.toLowerCase());
-      }
 
-      // Xác định email nhận cuối cùng
+      // Xác định email gửi: Ưu tiên Personal Email (hoặc Working Email)
       const targetEmail =
-        rawEmail || (onboardingInfo ? onboardingInfo.targetEmail : "");
+        (onboardingInfo && onboardingInfo.personalEmail) ||
+        rawEmail ||
+        (onboardingInfo ? onboardingInfo.workingEmail : "");
+
       if (!targetEmail || !ProbationReviewUtil.isValidEmail(targetEmail)) {
         summary.skipped.push(
-          `Dòng ${sheetRowNumberUC05} (${rawName}): Không tìm thấy Email hợp lệ để gửi.`,
+          `Dòng ${sheetRowNumberUC05} (${rawName}): Không tìm thấy Email hợp lệ.`,
         );
         continue;
       }
 
-      // 🔒 Fast Check Lock Metadata trên RAM của Sheet UC05
+      // 🔒 Fast Check Lock Metadata trên RAM
       const lockKey = `${metaPrefix}_${sheetRowNumberUC05}_${targetEmail.toLowerCase()}`;
       if (lockedMetadataSet.has(lockKey)) {
-        continue; // Đã xử lý và khóa trên UC05 trước đó -> Bỏ qua
+        continue;
       }
 
       // Kiểm tra mốc thời gian đến hạn (HR Ops - Start Process hoặc trước 15 ngày)
@@ -232,25 +277,54 @@ class ProbationReviewService {
           if (okrBlob) attachments.push(okrBlob);
         }
 
+        // Đọc Employment Type từ file Onboarding và phân loại đúng nhãn Review
+        const reviewTypeName = this.resolveReviewTypeLabel_(
+          onboardingInfo?.employmentType,
+          rawContractType,
+        );
+        const reviewTypeLower = reviewTypeName.toLowerCase();
+
+        // Cấu trúc Subject: [ReviewType] Review - [Employee Name] | [Title] | [Squad/Tribe]
+        const titleStr = onboardingInfo?.title || "";
+        const squadTribeStr = onboardingInfo?.squadTribe || "";
+        const metaSuffix = [titleStr, squadTribeStr]
+          .filter(Boolean)
+          .join(" | ");
+        const subject = `${reviewTypeName} Review - ${rawName}${metaSuffix ? ` | ${metaSuffix}` : ""}`;
+
+        // Danh sách CC: Line Manager, Dot Line Manager, people@kyanon.digital, TD in charge
+        const tdEmail = ProbationReviewUtil.cleanEmail(rawPic);
+        const ccSet = new Set();
+        if (onboardingInfo?.lineManager) ccSet.add(onboardingInfo.lineManager);
+        if (onboardingInfo?.dotLineManager)
+          ccSet.add(onboardingInfo.dotLineManager);
+        ccSet.add(PROBATION_REVIEW_CONFIG.EMAIL.PEOPLE_TEAM_EMAIL);
+        if (tdEmail) ccSet.add(tdEmail);
+
+        // Loại bỏ chính email người nhận khỏi danh sách CC
+        ccSet.delete(targetEmail.toLowerCase());
+        const ccList = Array.from(ccSet).join(", ");
+
         // Render HTML Email Template
         const template = HtmlService.createTemplateFromFile(
           "probation-review/probation-review-email",
         );
         template.fullName = rawName;
+        template.reviewTypeName = reviewTypeName;
+        template.reviewTypeLower = reviewTypeLower;
         template.stopProbationDate = onboardingInfo
           ? onboardingInfo.stopProbationDisplayDate
-          : "sắp tới";
+          : "[DD/MM/YYYY]";
         template.okrFolderUrl = onboardingInfo
           ? onboardingInfo.okrFolderUrl
           : "";
-        const htmlBody = template.evaluate().getContent();
+        template.senderName = senderName;
 
-        const subject = `[Official] Hera | Thông báo đánh giá thử việc - ${rawName}`;
-        const picEmail = ProbationReviewUtil.cleanEmail(rawPic);
+        const htmlBody = template.evaluate().getContent();
 
         const mailOptions = {
           htmlBody: htmlBody,
-          cc: picEmail || undefined,
+          cc: ccList || undefined,
           attachments: attachments,
         };
 
@@ -270,7 +344,10 @@ class ProbationReviewService {
         summary.processed.push({
           rowUC05: sheetRowNumberUC05,
           name: rawName,
+          type: reviewTypeName,
           email: targetEmail,
+          cc: ccList,
+          subject: subject,
           hasOkr: !!okrBlob,
         });
       } catch (err) {

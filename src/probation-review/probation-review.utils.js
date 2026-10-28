@@ -118,9 +118,13 @@ class ProbationReviewUtil {
   }
 
   /**
-   * Kiểm tra điều kiện đến hạn đánh giá thử việc (Dual-Gate):
-   * 1. Khớp ngày tại cột HR Ops - Start Process
-   * 2. Hoặc trước ngày Stop probation đúng targetDays (15 ngày)
+   * KIỂM TRA ĐIỀU KIỆN ĐẾN HẠN ĐÁNH GIÁ (Dual-Gate đếm ngược <= 15 ngày)
+   * @param {Date|string} startProcessVal - Cột H (UC05)
+   * @param {Date|string} stopProbationDate - Cột R (UC03)
+   * @param {number} targetDays - Mặc định 15 ngày
+   * @param {string} todayKey - yyyy-MM-dd của ngày hôm nay
+   * @param {string} timeZone - Múi giờ
+   * @return {boolean}
    */
   static isDueReview(
     startProcessVal,
@@ -131,23 +135,38 @@ class ProbationReviewUtil {
   ) {
     if (!todayKey) return false;
 
-    // 1. Kiểm tra ngày tại cột HR Ops - Start Process
+    const todayObj = this.parseToDateObject(todayKey);
+    if (!todayObj) return false;
+    todayObj.setHours(0, 0, 0, 0);
+
+    // CỬA 1: Ngày tại cột HR Ops - Start Process đã đến hạn (<= hôm nay)
     if (startProcessVal) {
-      const startKey = this.formatDateKey(startProcessVal, timeZone);
-      if (startKey && startKey === todayKey) return true;
+      const startProcessObj = this.parseToDateObject(startProcessVal);
+      if (startProcessObj) {
+        startProcessObj.setHours(0, 0, 0, 0);
+        // Đã tới hoặc đã qua ngày HR Ops ấn định bắt đầu
+        if (startProcessObj.getTime() <= todayObj.getTime()) {
+          return true;
+        }
+      }
     }
 
-    // 2. Kiểm tra trước Stop probation đúng targetDays (15 ngày)
+    // CỬA 2: Đếm ngược <= 15 ngày so với Stop probation
     if (stopProbationDate) {
       const stopDateObj = this.parseToDateObject(stopProbationDate);
       if (stopDateObj) {
-        stopDateObj.setDate(stopDateObj.getDate() - targetDays);
-        const triggerKey = Utilities.formatDate(
-          stopDateObj,
-          timeZone,
-          "yyyy-MM-dd",
+        stopDateObj.setHours(0, 0, 0, 0);
+
+        // Số ngày còn lại tính từ hôm nay tới ngày hết hạn thử việc
+        const diffDays = Math.round(
+          (stopDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24),
         );
-        if (triggerKey && triggerKey === todayKey) return true;
+
+        // Nằm trong khoảng đếm ngược 15 ngày (từ 0 đến 15 ngày)
+        // (diffDays >= 0 để tránh quét những người đã kết thúc thử việc từ lâu)
+        if (diffDays >= 0 && diffDays <= targetDays) {
+          return true;
+        }
       }
     }
 
