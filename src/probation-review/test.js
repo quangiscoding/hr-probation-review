@@ -103,3 +103,12 @@ function test_probationReviewProbe() {
   Logger.log(JSON.stringify(result, null, 2));
   return result;
 }
+
+/**
+ * Chạy thử nghiệm tạo Draft và in kết quả ra Logger
+ */
+function test_probationReviewRun() {
+  const result = ProbationReviewService.runProbationReview("draft");
+  Logger.log("=== KẾT QUẢ THỰC THI THỬ NGHIỆM ===");
+  Logger.log(JSON.stringify(result, null, 2));
+}

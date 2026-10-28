@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        line-height: 1.6;
+        color: #333333;
+        margin: 0;
+        padding: 20px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .header {
+        background-color: #0f172a;
+        color: #ffffff;
+        padding: 24px;
+        text-align: left;
+      }
+      .header h2 {
+        margin: 0 0 6px 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 24px;
+        background-color: #ffffff;
+      }
+      .highlight-box {
+        background-color: #f8fafc;
+        border-left: 4px solid #ef403e;
+        padding: 14px 16px;
+        margin: 18px 0;
+        border-radius: 0 6px 6px 0;
+      }
+      .steps {
+        padding-left: 20px;
+        margin: 16px 0;
+      }
+      .steps li {
+        margin-bottom: 8px;
+      }
+      .footer {
+        padding: 18px 24px;
+        background-color: #f1f5f9;
+        font-size: 13px;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+      }
+      .btn {
+        display: inline-block;
+        padding: 10px 18px;
+        background-color: #ef403e;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="header">
+        <h2>[Official] Hera | Thông báo đánh giá thử việc</h2>
+        <p style="margin: 0; font-size: 14px; opacity: 0.85">
+          Kyanon Digital - Talent Development Team
+        </p>
+      </div>
+      <div class="content">
+        <p>
+          Xin chào <strong><?= fullName ?></strong>,
+        </p>
+
+        <p>
+          Thời gian thử việc của bạn dự kiến sẽ hoàn thành vào ngày
+          <strong><?= stopProbationDate ?></strong>. Nhằm ghi nhận những đóng
+          góp cũng như định hướng phát triển sắp tới, Talent Development (TD)
+          Team xin thông báo bắt đầu quy trình đánh giá kết thúc thử việc
+          (Probation Review).
+        </p>
+
+        <div class="highlight-box">
+          <strong>📋 Các đầu việc cần chuẩn bị:</strong>
+          <ol class="steps">
+            <li>
+              <strong>Rà soát mục tiêu OKR:</strong> Điền kết quả thực tế và tự
+              chấm điểm trong file OKR (được đính kèm trong email này).
+            </li>
+            <li>
+              <strong>Chuẩn bị buổi trao đổi:</strong> Sắp xếp lịch họp đánh giá
+              thử việc cùng Trưởng bộ phận (Lead) và đại diện TD Team.
+            </li>
+          </ol>
+        </div>
+
+        <? if (okrFolderUrl) { ?>
+        <p>
+          Bạn cũng có thể xem trực tiếp thư mục lưu trữ tài liệu OKR của mình
+          tại đây:
+        </p>
+        <p>
+          <a href="<?= okrFolderUrl ?>" target="_blank" class="btn"
+            >📂 Mở Thư mục Drive OKR</a
+          >
+        </p>
+        <? } ?>
+
+        <p style="margin-top: 24px">
+          Nếu có bất kỳ thắc mắc nào, bạn vui lòng phản hồi trực tiếp qua email
+          này nhé.
+        </p>
+      </div>
+      <div class="footer">
+        Thân ái,<br />
+        <strong>Talent Development Team</strong> | Kyanon Digital
+      </div>
+    </div>
+  </body>
+</html>
