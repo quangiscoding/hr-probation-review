@@ -15,18 +15,6 @@ const TRACKING = [
   "Reminder Draft Time",
 ];
 
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu("Probation Catch-up")
-    .addItem("Enable reminders and HR form emails", "installTriggers")
-    .addItem("Enable reminder drafts", "installDraftTriggers")
-    .addItem("Disable automation", "disableTriggers")
-    .addItem("Draft reminders now", "draftReminders")
-    .addItem("Send reminders now", "sendReminders")
-    .addItem("Send HR review emails now", "sendHrEmails")
-    .addToUi();
-}
-
 function installTriggers() {
   if (!ONBOARD.appointmentTitle || !ONBOARD.hrFormUrl) {
     throw new Error("Configure appointmentTitle and hrFormUrl first.");
