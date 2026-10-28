@@ -112,3 +112,133 @@ function test_probationReviewRun() {
   Logger.log("=== KẾT QUẢ THỰC THI THỬ NGHIỆM ===");
   Logger.log(JSON.stringify(result, null, 2));
 }
+
+/**
+ * Test độc lập cho ProbationReviewUtil (Unit Test)
+ */
+function test_checkProbationUtils() {
+  const tests = [];
+
+  // 1. Test trích xuất Drive Folder ID
+  const testUrls = [
+    {
+      in: "https://drive.google.com/drive/folders/1a2B3c4D5e6F7g8H9i0JkLmNoPqRsTuVw",
+      exp: "1a2B3c4D5e6F7g8H9i0JkLmNoPqRsTuVw",
+    },
+    {
+      in: "https://drive.google.com/open?id=12eYdZzEDttN9Q01yC_p_CVTYISQ6zz12",
+      exp: "12eYdZzEDttN9Q01yC_p_CVTYISQ6zz12",
+    },
+    {
+      in: "18LTemcygQH-nxTgev1iGTs5wTSEFblUu",
+      exp: "18LTemcygQH-nxTgev1iGTs5wTSEFblUu",
+    },
+    { in: "invalid_short_url", exp: null },
+  ];
+  testUrls.forEach((t) => {
+    const res = ProbationReviewUtil.extractDriveId(t.in);
+    tests.push({
+      name: `extractDriveId: ${t.in.slice(0, 30)}...`,
+      pass: res === t.exp,
+      actual: res,
+      expected: t.exp,
+    });
+  });
+
+  // 2. Test parse các định dạng ngày thực tế từ 2 ảnh Sheet
+  // Giả định năm 2026 theo dữ liệu thực tế
+  const testDates = [
+    { in: "23-Aug", expKey: "2026-08-23", expDisplay: "23/08/2026" },
+    { in: "02-Sep", expKey: "2026-09-02", expDisplay: "02/09/2026" },
+    { in: "31-Jul-2026", expKey: "2026-07-31", expDisplay: "31/07/2026" },
+    { in: "14-Sep-2026", expKey: "2026-09-14", expDisplay: "14/09/2026" },
+    {
+      in: new Date("2026-08-23T00:00:00"),
+      expKey: "2026-08-23",
+      expDisplay: "23/08/2026",
+    },
+  ];
+  testDates.forEach((t) => {
+    const key = ProbationReviewUtil.formatDateKey(t.in);
+    const disp = ProbationReviewUtil.formatDisplayDate(t.in);
+    tests.push({
+      name: `DateParse (${t.in})`,
+      pass: key === t.expKey && disp === t.expDisplay,
+      actual: { key, disp },
+      expected: { expKey: t.expKey, expDisplay: t.expDisplay },
+    });
+  });
+
+  // 3. Test logic isDueReview (Trước 15 ngày & Khớp HR Ops)
+  // Kịch bản A: Ngày hôm nay là 2026-08-23, cột Start Process là "23-Aug" -> TRUE
+  const testA = ProbationReviewUtil.isDueReview(
+    "23-Aug",
+    null,
+    15,
+    "2026-08-23",
+  );
+  tests.push({
+    name: "isDue: Trùng HR Ops 23-Aug",
+    pass: testA === true,
+    actual: testA,
+    expected: true,
+  });
+
+  // Kịch bản B: Ngày hết hạn thử việc là "31-Jul-2026". Trừ 15 ngày là "2026-07-16".
+  // Nếu hôm nay là 2026-07-16 -> TRUE
+  const testB = ProbationReviewUtil.isDueReview(
+    null,
+    "31-Jul-2026",
+    15,
+    "2026-07-16",
+  );
+  tests.push({
+    name: "isDue: Stop probation 31-Jul-2026 lùi 15 ngày = 16-Jul",
+    pass: testB === true,
+    actual: testB,
+    expected: true,
+  });
+
+  // Kịch bản C: Chưa đến hạn (Hôm nay 2026-07-10) -> FALSE
+  const testC = ProbationReviewUtil.isDueReview(
+    "23-Aug",
+    "31-Jul-2026",
+    15,
+    "2026-07-10",
+  );
+  tests.push({
+    name: "isDue: Chưa đến hạn",
+    pass: testC === false,
+    actual: testC,
+    expected: false,
+  });
+
+  // 4. Test clean email
+  const emailTest1 = ProbationReviewUtil.cleanEmail("suong.phan");
+  const emailTest2 = ProbationReviewUtil.cleanEmail("abc@gmail.com");
+  tests.push({
+    name: "cleanEmail username",
+    pass: emailTest1 === "suong.phan@kyanon.digital",
+    actual: emailTest1,
+    expected: "suong.phan@kyanon.digital",
+  });
+  tests.push({
+    name: "cleanEmail full",
+    pass: emailTest2 === "abc@gmail.com",
+    actual: emailTest2,
+    expected: "abc@gmail.com",
+  });
+
+  Logger.log("=== KẾT QUẢ TEST UTILS ===");
+  tests.forEach((t, i) => {
+    Logger.log(
+      `${t.pass ? "✅ PASS" : "❌ FAIL"} [${i + 1}] ${t.name} -> Actual: ${JSON.stringify(t.actual)}`,
+    );
+  });
+
+  const totalFailed = tests.filter((t) => !t.pass).length;
+  Logger.log(
+    `TỔNG KẾT: ${tests.length - totalFailed}/${tests.length} tests passed.`,
+  );
+  return { total: tests.length, failed: totalFailed, details: tests };
+}
