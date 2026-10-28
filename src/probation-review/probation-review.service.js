@@ -202,6 +202,7 @@ class ProbationReviewService {
     const picIdx = headers.indexOf(tConfig.COLS.PIC);
     const contractTypeIdx = headers.indexOf(tConfig.COLS.TYPE_OF_CONTRACT);
     const startProcessIdx = headers.indexOf(tConfig.COLS.HR_OPS_START_PROCESS);
+    const consolidationIdx = headers.indexOf(tConfig.COLS.HR_OPS_CONSOLIDATION);
     const candidateEmailIdx = headers.indexOf(tConfig.COLS.CANDIDATE_EMAIL);
 
     const summary = {
@@ -224,6 +225,8 @@ class ProbationReviewService {
         .trim()
         .toLowerCase();
       const rawStartProcess = row[startProcessIdx];
+      const rawConsolidation =
+        consolidationIdx >= 0 ? row[consolidationIdx] : null;
       const rawPic = String(row[picIdx] || "").trim();
       const rawContractType = String(row[contractTypeIdx] || "").trim();
 
@@ -305,6 +308,17 @@ class ProbationReviewService {
         ccSet.delete(targetEmail.toLowerCase());
         const ccList = Array.from(ccSet).join(", ");
 
+        // Format mốc thời gian:
+        // DD/MM/YYYY thứ 1: Ngày kết thúc thử việc (từ Onboarding UC03)
+        const stopProbationDisplay = onboardingInfo
+          ? onboardingInfo.stopProbationDisplayDate
+          : "[DD/MM/YYYY]";
+
+        // DD/MM/YYYY thứ 2: Hạn chót từ cột HR Ops Consolidation (từ UC05)
+        const consolidationDisplay = rawConsolidation
+          ? ProbationReviewUtil.formatDisplayDate(rawConsolidation, timeZone)
+          : stopProbationDisplay;
+
         // Render HTML Email Template
         const template = HtmlService.createTemplateFromFile(
           "probation-review/probation-review-email",
@@ -312,9 +326,8 @@ class ProbationReviewService {
         template.fullName = rawName;
         template.reviewTypeName = reviewTypeName;
         template.reviewTypeLower = reviewTypeLower;
-        template.stopProbationDate = onboardingInfo
-          ? onboardingInfo.stopProbationDisplayDate
-          : "[DD/MM/YYYY]";
+        template.stopProbationDate = stopProbationDisplay;
+        template.consolidationDate = consolidationDisplay;
         template.okrFolderUrl = onboardingInfo
           ? onboardingInfo.okrFolderUrl
           : "";
@@ -348,6 +361,8 @@ class ProbationReviewService {
           email: targetEmail,
           cc: ccList,
           subject: subject,
+          stopDate: stopProbationDisplay,
+          consolidationDate: consolidationDisplay,
           hasOkr: !!okrBlob,
         });
       } catch (err) {
