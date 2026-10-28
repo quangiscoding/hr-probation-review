@@ -43,6 +43,39 @@ class ProbationReviewUtil {
   }
 
   /**
+   * Trích xuất an toàn URL Google Drive/Folder từ ô bảng tính
+   * Xử lý trọn gói: Hyperlink ẩn trong RichText, chuỗi thô, hoặc ID thô
+   * @param {*} cellValue - Giá trị thô từ getValues() (ví dụ: chữ "Link")
+   * @param {GoogleAppsScript.Spreadsheet.RichTextValue} [cellRichText] - Object từ getRichTextValues()
+   * @return {string} URL Drive đầy đủ hoặc chuỗi rỗng
+   */
+  static extractCellUrl(cellValue, cellRichText) {
+    // 1. Ưu tiên cao nhất: Lấy link ẩn dưới chữ qua RichText
+    if (cellRichText && typeof cellRichText.getLinkUrl === "function") {
+      const url = cellRichText.getLinkUrl();
+      if (url && /^https?:\/\//i.test(url.trim())) {
+        return url.trim();
+      }
+    }
+
+    const raw = String(cellValue || "").trim();
+    if (!raw) return "";
+
+    // 2. Nếu ô là URL trực tiếp
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+
+    // 3. Nếu ô là ID Drive thô (độ dài 25-50 ký tự)
+    if (/^[-\w]{25,50}$/.test(raw)) {
+      return `https://drive.google.com/drive/folders/${raw}`;
+    }
+
+    // 4. Các trường hợp chữ rác hiển thị như "Link", "N/A", v.v. mà không có URL ẩn
+    return "";
+  }
+
+  /**
    * Parse an toàn mọi định dạng ngày trên Google Sheet:
    * - Date object nguyên bản từ Google Sheet
    * - "31-Jul-2026" / "14-Sep-2026" (dạng dd-MMM-yyyy trên Sheet Onboarding UC03)

@@ -1,6 +1,6 @@
 /**
  * src/probation-review/probation-review.service.js
- * Service Pattern: Batch reading RAM, đối soát liên Sheet, bốc file OKR
+ * Service Pattern: Batch reading RAM, đối soát liên Sheet, tạo Draft/Gửi Email
  * Khóa dòng bằng Developer Metadata trực tiếp trên Sheet UC05 (Contract Tracking)
  */
 
@@ -23,21 +23,22 @@ class ProbationReviewService {
     const oConfig = PROBATION_REVIEW_CONFIG.ONBOARDING;
     const ss = SpreadsheetApp.openById(oConfig.SPREADSHEET_ID);
 
-    let sheet = null;
+    // Tìm sheet theo TAB_GID
     const sheets = ss.getSheets();
-    for (let s of sheets) {
-      if (String(s.getSheetId()) === String(oConfig.TAB_GID)) {
-        sheet = s;
-        break;
-      }
-    }
-    if (!sheet) sheet = sheets[0];
+    const sheet =
+      sheets.find((s) => String(s.getSheetId()) === String(oConfig.TAB_GID)) ||
+      sheets[0];
 
-    const data = sheet.getDataRange().getValues();
+    // Đọc đồng thời Giá trị và RichText (link ẩn) về RAM trong 1 lần gọi (Batch Read)
+    const range = sheet.getDataRange();
+    const data = range.getValues();
+    const richTexts = range.getRichTextValues();
+
     if (data.length < oConfig.DATA_START_ROW_INDEX) {
       return { byEmail: new Map(), byName: new Map() };
     }
 
+    // Map vị trí index cột động từ dòng tiêu đề
     const headers = data[oConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
     const fullNameIdx = headers.indexOf(oConfig.COLS.FULL_NAME);
     const personalEmailIdx = headers.indexOf(oConfig.COLS.PERSONAL_EMAIL);
@@ -55,99 +56,62 @@ class ProbationReviewService {
 
     const byEmail = new Map();
     const byName = new Map();
-
     const startRow = oConfig.DATA_START_ROW_INDEX - 1;
+
     for (let r = startRow; r < data.length; r++) {
       const row = data[r];
       const fullName = String(row[fullNameIdx] || "").trim();
+      if (!fullName) continue;
+
       const personalEmail = ProbationReviewUtil.cleanEmail(
         row[personalEmailIdx],
       );
       const workingEmail = ProbationReviewUtil.cleanEmail(row[workingEmailIdx]);
-      const stopProbationDate = row[stopDateIdx];
-      const okrFolderUrl = String(row[okrFolderIdx] || "").trim();
-      const title = String(row[titleIdx] || "").trim();
       const squad = String(row[squadIdx] || "").trim();
       const tribe = String(row[tribeIdx] || "").trim();
-      const lineManager = ProbationReviewUtil.cleanEmail(row[lmIdx]);
-      const dotLineManager = ProbationReviewUtil.cleanEmail(row[dlmIdx]);
-      const employmentType = String(row[empTypeIdx] || "").trim();
 
-      // Xử lý chống trùng lặp tên nếu squad và tribe giống hệt nhau
-      let squadTribe = "";
-      if (squad && tribe) {
-        squadTribe =
-          squad.toLowerCase() === tribe.toLowerCase()
-            ? squad
-            : `${squad} / ${tribe}`;
-      } else {
-        squadTribe = squad || tribe || "";
-      }
+      // Bóc tách URL Folder OKR (xử lý link ẩn trong cell hoặc chuỗi thô)
+      const okrFolderUrl =
+        okrFolderIdx >= 0
+          ? ProbationReviewUtil.extractCellUrl(
+              row[okrFolderIdx],
+              richTexts[r]?.[okrFolderIdx],
+            )
+          : "";
+
+      // Gộp Squad/Tribe chống trùng tên lặp lại
+      const squadTribe =
+        squad && tribe && squad.toLowerCase() === tribe.toLowerCase()
+          ? squad
+          : [squad, tribe].filter(Boolean).join(" / ");
 
       const record = {
-        fullName: fullName,
-        personalEmail: personalEmail,
-        workingEmail: workingEmail,
+        fullName,
+        personalEmail,
+        workingEmail,
         targetEmail: personalEmail || workingEmail,
-        stopProbationDate: stopProbationDate,
-        stopProbationDisplayDate:
-          ProbationReviewUtil.formatDisplayDate(stopProbationDate),
-        okrFolderUrl: okrFolderUrl,
-        title: title,
-        squadTribe: squadTribe,
-        lineManager: lineManager,
-        dotLineManager: dotLineManager,
-        employmentType: employmentType,
+        stopProbationDate: row[stopDateIdx],
+        stopProbationDisplayDate: ProbationReviewUtil.formatDisplayDate(
+          row[stopDateIdx],
+        ),
+        okrFolderUrl,
+        title: String(row[titleIdx] || "").trim(),
+        squadTribe,
+        lineManager: ProbationReviewUtil.cleanEmail(row[lmIdx]),
+        dotLineManager: ProbationReviewUtil.cleanEmail(row[dlmIdx]),
+        employmentType: String(row[empTypeIdx] || "").trim(),
       };
 
       if (personalEmail) byEmail.set(personalEmail, record);
       if (workingEmail) byEmail.set(workingEmail, record);
-      if (fullName) byName.set(fullName.toLowerCase(), record);
+      byName.set(fullName.toLowerCase(), record);
     }
 
     return { byEmail, byName };
   }
 
   /**
-   * 2. Bốc file OKR từ Google Drive Folder
-   */
-  static getOkrAttachmentFromFolder_(folderUrl) {
-    if (!folderUrl) return null;
-    const folderId = ProbationReviewUtil.extractDriveId(folderUrl);
-    if (!folderId) return null;
-
-    try {
-      const folder = DriveApp.getFolderById(folderId);
-      const files = folder.getFiles();
-      let targetFile = null;
-
-      while (files.hasNext()) {
-        const file = files.next();
-        const name = file.getName().toLowerCase();
-        if (name.includes("okr")) {
-          targetFile = file;
-          break;
-        }
-        if (!targetFile) targetFile = file;
-      }
-
-      if (!targetFile) return null;
-
-      const mime = targetFile.getMimeType();
-      if (mime === MimeType.GOOGLE_SHEETS || mime === MimeType.GOOGLE_DOCS) {
-        return targetFile
-          .getAs(MimeType.PDF)
-          .setName(`[OKR]_${targetFile.getName()}.pdf`);
-      }
-      return targetFile.getBlob();
-    } catch (e) {
-      Logger.log("⚠️ Không lấy được file OKR: " + e.message);
-      return null;
-    }
-  }
-
-  /**
-   * 3. Chạy luồng quét đối soát và gửi mail / tạo draft
+   * 2. Chạy luồng quét đối soát và gửi mail / tạo draft
    * @param {"draft"|"send"} mode
    */
   static runProbationReview(mode = "draft") {
@@ -196,6 +160,7 @@ class ProbationReviewService {
       );
     }
 
+    // Map các cột cần đọc từ tiêu đề dòng 1
     const headers =
       dataUC05[tConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
     const nameIdx = headers.indexOf(tConfig.COLS.FULL_NAME);
@@ -270,16 +235,6 @@ class ProbationReviewService {
       if (!isDue) continue;
 
       try {
-        // Lấy attachment file OKR từ thư mục Drive
-        const attachments = [];
-        let okrBlob = null;
-        if (onboardingInfo && onboardingInfo.okrFolderUrl) {
-          okrBlob = this.getOkrAttachmentFromFolder_(
-            onboardingInfo.okrFolderUrl,
-          );
-          if (okrBlob) attachments.push(okrBlob);
-        }
-
         // Đọc Employment Type từ file Onboarding và phân loại đúng nhãn Review
         const reviewTypeName = this.resolveReviewTypeLabel_(
           onboardingInfo?.employmentType,
@@ -338,7 +293,6 @@ class ProbationReviewService {
         const mailOptions = {
           htmlBody: htmlBody,
           cc: ccList || undefined,
-          attachments: attachments,
         };
 
         if (mode === "send") {
@@ -363,7 +317,7 @@ class ProbationReviewService {
           subject: subject,
           stopDate: stopProbationDisplay,
           consolidationDate: consolidationDisplay,
-          hasOkr: !!okrBlob,
+          folderUrl: onboardingInfo?.okrFolderUrl || "",
         });
       } catch (err) {
         summary.errors.push(
