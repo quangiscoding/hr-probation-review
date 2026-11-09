@@ -43,7 +43,7 @@ function cron_autoDraftProbationReview() {
 function installDailyDraftTrigger() {
   const triggerName = "cron_autoDraftProbationReview";
 
-  // Xóa trigger cũ để tránh chạy lặp
+  // Xóa trigger cũ để tránh chạy trùng lặp
   const triggers = ScriptApp.getProjectTriggers();
   for (let t of triggers) {
     if (t.getHandlerFunction() === triggerName) {
@@ -51,15 +51,10 @@ function installDailyDraftTrigger() {
     }
   }
 
-  // Cài đặt Giờ: 8h, Phút: xấp xỉ 30 phút
-  ScriptApp.newTrigger(triggerName)
-    .timeBased()
-    .everyDays(1)
-    .atHour(13)
-    .nearMinute(51) // 👈 Thêm phút tại đây (0, 15, 30, 45,...)
-    .create();
+  // Cài đặt chạy mỗi ngày trong khung giờ từ 8h đến 9h sáng
+  ScriptApp.newTrigger(triggerName).timeBased().everyDays(1).atHour(8).create();
 
-  SpreadsheetApp.getUi().alert("Đã bật tự động!", "Hệ thống sẽ tự động quét và tạo bản nháp (Draft) vào khoảng 08:30 sáng mỗi ngày.", SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert("Đã bật tự động!", "Hệ thống sẽ tự động quét và tạo bản nháp (Draft) vào khoảng 8h - 9h sáng mỗi ngày.", SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /**
