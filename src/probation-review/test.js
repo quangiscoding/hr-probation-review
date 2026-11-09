@@ -32,8 +32,7 @@ function test_probationReviewProbe() {
         result.trackingMatchedCols[key] = {
           expected: expectedCol,
           foundIndex: foundIdx,
-          realHeader:
-            foundIdx >= 0 ? tRawHeaders[foundIdx] : "❌ KHÔNG TÌM THẤY",
+          realHeader: foundIdx >= 0 ? tRawHeaders[foundIdx] : "❌ KHÔNG TÌM THẤY",
         };
       });
 
@@ -80,8 +79,7 @@ function test_probationReviewProbe() {
         result.onboardingMatchedCols[key] = {
           expected: expectedCol,
           foundIndex: foundIdx,
-          realHeader:
-            foundIdx >= 0 ? oRawHeaders[foundIdx] : "❌ KHÔNG TÌM THẤY",
+          realHeader: foundIdx >= 0 ? oRawHeaders[foundIdx] : "❌ KHÔNG TÌM THẤY",
         };
       });
 
@@ -171,12 +169,7 @@ function test_checkProbationUtils() {
 
   // 3. Test logic isDueReview (Trước 15 ngày & Khớp HR Ops)
   // Kịch bản A: Ngày hôm nay là 2026-08-23, cột Start Process là "23-Aug" -> TRUE
-  const testA = ProbationReviewUtil.isDueReview(
-    "23-Aug",
-    null,
-    15,
-    "2026-08-23",
-  );
+  const testA = ProbationReviewUtil.isDueReview("23-Aug", null, 15, "2026-08-23");
   tests.push({
     name: "isDue: Trùng HR Ops 23-Aug",
     pass: testA === true,
@@ -186,12 +179,7 @@ function test_checkProbationUtils() {
 
   // Kịch bản B: Ngày hết hạn thử việc là "31-Jul-2026". Trừ 15 ngày là "2026-07-16".
   // Nếu hôm nay là 2026-07-16 -> TRUE
-  const testB = ProbationReviewUtil.isDueReview(
-    null,
-    "31-Jul-2026",
-    15,
-    "2026-07-16",
-  );
+  const testB = ProbationReviewUtil.isDueReview(null, "31-Jul-2026", 15, "2026-07-16");
   tests.push({
     name: "isDue: Stop probation 31-Jul-2026 lùi 15 ngày = 16-Jul",
     pass: testB === true,
@@ -200,12 +188,7 @@ function test_checkProbationUtils() {
   });
 
   // Kịch bản C: Chưa đến hạn (Hôm nay 2026-07-10) -> FALSE
-  const testC = ProbationReviewUtil.isDueReview(
-    "23-Aug",
-    "31-Jul-2026",
-    15,
-    "2026-07-10",
-  );
+  const testC = ProbationReviewUtil.isDueReview("23-Aug", "31-Jul-2026", 15, "2026-07-10");
   tests.push({
     name: "isDue: Chưa đến hạn",
     pass: testC === false,
@@ -231,14 +214,10 @@ function test_checkProbationUtils() {
 
   Logger.log("=== KẾT QUẢ TEST UTILS ===");
   tests.forEach((t, i) => {
-    Logger.log(
-      `${t.pass ? "✅ PASS" : "❌ FAIL"} [${i + 1}] ${t.name} -> Actual: ${JSON.stringify(t.actual)}`,
-    );
+    Logger.log(`${t.pass ? "✅ PASS" : "❌ FAIL"} [${i + 1}] ${t.name} -> Actual: ${JSON.stringify(t.actual)}`);
   });
 
   const totalFailed = tests.filter((t) => !t.pass).length;
-  Logger.log(
-    `TỔNG KẾT: ${tests.length - totalFailed}/${tests.length} tests passed.`,
-  );
+  Logger.log(`TỔNG KẾT: ${tests.length - totalFailed}/${tests.length} tests passed.`);
   return { total: tests.length, failed: totalFailed, details: tests };
 }

@@ -31,9 +31,7 @@ const PROBATION_REVIEW_CONFIG = {
       UNIT_SQUAD_NAME: normalizeHeaderKey("Unit / Squad Name"),
       TYPE_OF_CONTRACT: normalizeHeaderKey("Type of contract"),
       PIC: normalizeHeaderKey("PIC"),
-      ONE_MONTH_PROBATION_CATCHUP: normalizeHeaderKey(
-        "1-month probation catchup",
-      ),
+      ONE_MONTH_PROBATION_CATCHUP: normalizeHeaderKey("1-month probation catchup"),
       HR_OPS_START_PROCESS: normalizeHeaderKey("HR Ops - Start Process"),
       SL_LM_CONFIRM: normalizeHeaderKey("SL/LM Confirm"),
       HR_OPS_CONSOLIDATION: normalizeHeaderKey("HR Ops Consolidation"),
@@ -65,9 +63,7 @@ const PROBATION_REVIEW_CONFIG = {
       DATE_OF_OFFER: normalizeHeaderKey("Date of Offer"),
       TA_IN_CHARGE: normalizeHeaderKey("TA In Charge"),
       DATE_OF_ONBOARD: normalizeHeaderKey("Date of Onboard"),
-      STOP_PROBATION_INTERN_DATE: normalizeHeaderKey(
-        "Stop probation/ intern date",
-      ),
+      STOP_PROBATION_INTERN_DATE: normalizeHeaderKey("Stop probation/ intern date"),
       OFFER_STATUS: normalizeHeaderKey("Offer Status"),
       DEVICE_REQUEST: normalizeHeaderKey("Device Request from newcomer"),
       ONBOARDING_TYPE: normalizeHeaderKey("Onboarding Type"),

@@ -25,9 +25,7 @@ class ProbationReviewService {
 
     // Tìm sheet theo TAB_GID
     const sheets = ss.getSheets();
-    const sheet =
-      sheets.find((s) => String(s.getSheetId()) === String(oConfig.TAB_GID)) ||
-      sheets[0];
+    const sheet = sheets.find((s) => String(s.getSheetId()) === String(oConfig.TAB_GID)) || sheets[0];
 
     // Đọc đồng thời Giá trị và RichText (link ẩn) về RAM trong 1 lần gọi (Batch Read)
     const range = sheet.getDataRange();
@@ -43,9 +41,7 @@ class ProbationReviewService {
     const fullNameIdx = headers.indexOf(oConfig.COLS.FULL_NAME);
     const personalEmailIdx = headers.indexOf(oConfig.COLS.PERSONAL_EMAIL);
     const workingEmailIdx = headers.indexOf(oConfig.COLS.WORKING_EMAIL);
-    const stopDateIdx = headers.indexOf(
-      oConfig.COLS.STOP_PROBATION_INTERN_DATE,
-    );
+    const stopDateIdx = headers.indexOf(oConfig.COLS.STOP_PROBATION_INTERN_DATE);
     const okrFolderIdx = headers.indexOf(oConfig.COLS.LINK_FOLDER_OKRS);
     const titleIdx = headers.indexOf(oConfig.COLS.TITLE);
     const squadIdx = headers.indexOf(oConfig.COLS.SQUAD_UNIT);
@@ -63,27 +59,16 @@ class ProbationReviewService {
       const fullName = String(row[fullNameIdx] || "").trim();
       if (!fullName) continue;
 
-      const personalEmail = ProbationReviewUtil.cleanEmail(
-        row[personalEmailIdx],
-      );
+      const personalEmail = ProbationReviewUtil.cleanEmail(row[personalEmailIdx]);
       const workingEmail = ProbationReviewUtil.cleanEmail(row[workingEmailIdx]);
       const squad = String(row[squadIdx] || "").trim();
       const tribe = String(row[tribeIdx] || "").trim();
 
       // Bóc tách URL Folder OKR (xử lý link ẩn trong cell hoặc chuỗi thô)
-      const okrFolderUrl =
-        okrFolderIdx >= 0
-          ? ProbationReviewUtil.extractCellUrl(
-              row[okrFolderIdx],
-              richTexts[r]?.[okrFolderIdx],
-            )
-          : "";
+      const okrFolderUrl = okrFolderIdx >= 0 ? ProbationReviewUtil.extractCellUrl(row[okrFolderIdx], richTexts[r]?.[okrFolderIdx]) : "";
 
       // Gộp Squad/Tribe chống trùng tên lặp lại
-      const squadTribe =
-        squad && tribe && squad.toLowerCase() === tribe.toLowerCase()
-          ? squad
-          : [squad, tribe].filter(Boolean).join(" / ");
+      const squadTribe = squad && tribe && squad.toLowerCase() === tribe.toLowerCase() ? squad : [squad, tribe].filter(Boolean).join(" / ");
 
       const record = {
         fullName,
@@ -91,9 +76,7 @@ class ProbationReviewService {
         workingEmail,
         targetEmail: personalEmail || workingEmail,
         stopProbationDate: row[stopDateIdx],
-        stopProbationDisplayDate: ProbationReviewUtil.formatDisplayDate(
-          row[stopDateIdx],
-        ),
+        stopProbationDisplayDate: ProbationReviewUtil.formatDisplayDate(row[stopDateIdx]),
         okrFolderUrl,
         title: String(row[titleIdx] || "").trim(),
         squadTribe,
@@ -132,8 +115,7 @@ class ProbationReviewService {
 
     // 2. Mở bảng UC05 (Contract Tracking)
     const ssUC05 = SpreadsheetApp.openById(tConfig.SPREADSHEET_ID);
-    const sheetUC05 =
-      ssUC05.getSheetByName(tConfig.TAB_NAME) || ssUC05.getSheets()[0];
+    const sheetUC05 = ssUC05.getSheetByName(tConfig.TAB_NAME) || ssUC05.getSheets()[0];
     const dataUC05 = sheetUC05.getDataRange().getValues();
 
     if (dataUC05.length < tConfig.DATA_START_ROW_INDEX) {
@@ -155,14 +137,11 @@ class ProbationReviewService {
         if (v) lockedMetadataSet.add(v);
       });
     } catch (errMeta) {
-      Logger.log(
-        "⚠️ Không tải được Metadata theo lô trên UC05: " + errMeta.message,
-      );
+      Logger.log("⚠️ Không tải được Metadata theo lô trên UC05: " + errMeta.message);
     }
 
     // Map các cột cần đọc từ tiêu đề dòng 1
-    const headers =
-      dataUC05[tConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
+    const headers = dataUC05[tConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
     const nameIdx = headers.indexOf(tConfig.COLS.FULL_NAME);
     const picIdx = headers.indexOf(tConfig.COLS.PIC);
     const contractTypeIdx = headers.indexOf(tConfig.COLS.TYPE_OF_CONTRACT);
@@ -190,8 +169,7 @@ class ProbationReviewService {
         .trim()
         .toLowerCase();
       const rawStartProcess = row[startProcessIdx];
-      const rawConsolidation =
-        consolidationIdx >= 0 ? row[consolidationIdx] : null;
+      const rawConsolidation = consolidationIdx >= 0 ? row[consolidationIdx] : null;
       const rawPic = String(row[picIdx] || "").trim();
       const rawContractType = String(row[contractTypeIdx] || "").trim();
 
@@ -200,19 +178,13 @@ class ProbationReviewService {
       // Tra cứu chéo sang Onboarding: ưu tiên Email nếu có, fallback sang Họ Tên
       let onboardingInfo = null;
       if (rawEmail) onboardingInfo = byEmail.get(rawEmail);
-      if (!onboardingInfo && rawName)
-        onboardingInfo = byName.get(rawName.toLowerCase());
+      if (!onboardingInfo && rawName) onboardingInfo = byName.get(rawName.toLowerCase());
 
       // Xác định email gửi: Ưu tiên Personal Email (hoặc Working Email)
-      const targetEmail =
-        (onboardingInfo && onboardingInfo.personalEmail) ||
-        rawEmail ||
-        (onboardingInfo ? onboardingInfo.workingEmail : "");
+      const targetEmail = (onboardingInfo && onboardingInfo.personalEmail) || rawEmail || (onboardingInfo ? onboardingInfo.workingEmail : "");
 
       if (!targetEmail || !ProbationReviewUtil.isValidEmail(targetEmail)) {
-        summary.skipped.push(
-          `Dòng ${sheetRowNumberUC05} (${rawName}): Không tìm thấy Email hợp lệ.`,
-        );
+        summary.skipped.push(`Dòng ${sheetRowNumberUC05} (${rawName}): Không tìm thấy Email hợp lệ.`);
         continue;
       }
 
@@ -224,38 +196,26 @@ class ProbationReviewService {
 
       // Kiểm tra mốc thời gian đến hạn (HR Ops - Start Process hoặc trước 15 ngày)
       const stopDate = onboardingInfo ? onboardingInfo.stopProbationDate : null;
-      const isDue = ProbationReviewUtil.isDueReview(
-        rawStartProcess,
-        stopDate,
-        PROBATION_REVIEW_CONFIG.DAYS_BEFORE_STOP,
-        todayKey,
-        timeZone,
-      );
+      const isDue = ProbationReviewUtil.isDueReview(rawStartProcess, stopDate, PROBATION_REVIEW_CONFIG.DAYS_BEFORE_STOP, todayKey, timeZone);
 
       if (!isDue) continue;
 
       try {
         // Đọc Employment Type từ file Onboarding và phân loại đúng nhãn Review
-        const reviewTypeName = this.resolveReviewTypeLabel_(
-          onboardingInfo?.employmentType,
-          rawContractType,
-        );
+        const reviewTypeName = this.resolveReviewTypeLabel_(onboardingInfo?.employmentType, rawContractType);
         const reviewTypeLower = reviewTypeName.toLowerCase();
 
         // Cấu trúc Subject: [ReviewType] Review - [Employee Name] | [Title] | [Squad/Tribe]
         const titleStr = onboardingInfo?.title || "";
         const squadTribeStr = onboardingInfo?.squadTribe || "";
-        const metaSuffix = [titleStr, squadTribeStr]
-          .filter(Boolean)
-          .join(" | ");
+        const metaSuffix = [titleStr, squadTribeStr].filter(Boolean).join(" | ");
         const subject = `${reviewTypeName} Review - ${rawName}${metaSuffix ? ` | ${metaSuffix}` : ""}`;
 
         // Danh sách CC: Line Manager, Dot Line Manager, people@kyanon.digital, TD in charge
         const tdEmail = ProbationReviewUtil.cleanEmail(rawPic);
         const ccSet = new Set();
         if (onboardingInfo?.lineManager) ccSet.add(onboardingInfo.lineManager);
-        if (onboardingInfo?.dotLineManager)
-          ccSet.add(onboardingInfo.dotLineManager);
+        if (onboardingInfo?.dotLineManager) ccSet.add(onboardingInfo.dotLineManager);
         ccSet.add(PROBATION_REVIEW_CONFIG.EMAIL.PEOPLE_TEAM_EMAIL);
         if (tdEmail) ccSet.add(tdEmail);
 
@@ -265,27 +225,19 @@ class ProbationReviewService {
 
         // Format mốc thời gian:
         // DD/MM/YYYY thứ 1: Ngày kết thúc thử việc (từ Onboarding UC03)
-        const stopProbationDisplay = onboardingInfo
-          ? onboardingInfo.stopProbationDisplayDate
-          : "[DD/MM/YYYY]";
+        const stopProbationDisplay = onboardingInfo ? onboardingInfo.stopProbationDisplayDate : "[DD/MM/YYYY]";
 
         // DD/MM/YYYY thứ 2: Hạn chót từ cột HR Ops Consolidation (từ UC05)
-        const consolidationDisplay = rawConsolidation
-          ? ProbationReviewUtil.formatDisplayDate(rawConsolidation, timeZone)
-          : stopProbationDisplay;
+        const consolidationDisplay = rawConsolidation ? ProbationReviewUtil.formatDisplayDate(rawConsolidation, timeZone) : stopProbationDisplay;
 
         // Render HTML Email Template
-        const template = HtmlService.createTemplateFromFile(
-          "probation-review/probation-review-email",
-        );
+        const template = HtmlService.createTemplateFromFile("probation-review/probation-review-email");
         template.fullName = rawName;
         template.reviewTypeName = reviewTypeName;
         template.reviewTypeLower = reviewTypeLower;
         template.stopProbationDate = stopProbationDisplay;
         template.consolidationDate = consolidationDisplay;
-        template.okrFolderUrl = onboardingInfo
-          ? onboardingInfo.okrFolderUrl
-          : "";
+        template.okrFolderUrl = onboardingInfo ? onboardingInfo.okrFolderUrl : "";
         template.senderName = senderName;
 
         const htmlBody = template.evaluate().getContent();
@@ -302,9 +254,7 @@ class ProbationReviewService {
         }
 
         // 🔒 KHÓA DÒNG BẰNG DEVELOPER METADATA TRÊN SHEET UC05 (CÚ PHÁP ENTIRE ROW CHUẨN)
-        sheetUC05
-          .getRange(`${sheetRowNumberUC05}:${sheetRowNumberUC05}`)
-          .addDeveloperMetadata(lockKey, new Date().toISOString());
+        sheetUC05.getRange(`${sheetRowNumberUC05}:${sheetRowNumberUC05}`).addDeveloperMetadata(lockKey, new Date().toISOString());
         lockedMetadataSet.add(lockKey);
 
         summary.processedCount++;
@@ -320,9 +270,7 @@ class ProbationReviewService {
           folderUrl: onboardingInfo?.okrFolderUrl || "",
         });
       } catch (err) {
-        summary.errors.push(
-          `Dòng ${sheetRowNumberUC05} (${rawName}): ${err.message}`,
-        );
+        summary.errors.push(`Dòng ${sheetRowNumberUC05} (${rawName}): ${err.message}`);
       }
     }
 

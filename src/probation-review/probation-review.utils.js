@@ -31,9 +31,7 @@ class ProbationReviewUtil {
   static extractDriveId(url) {
     if (!url) return null;
     const raw = String(url).trim();
-    const match = raw.match(
-      /(?:\/(?:d|folders)\/|[?&]id=)([-\w]{25,50})(?:[/?&#]|$)/,
-    );
+    const match = raw.match(/(?:\/(?:d|folders)\/|[?&]id=)([-\w]{25,50})(?:[/?&#]|$)/);
     if (match) return match[1];
 
     if (/^[-\w]{25,50}$/.test(raw)) {
@@ -159,13 +157,7 @@ class ProbationReviewUtil {
    * @param {string} timeZone - Múi giờ
    * @return {boolean}
    */
-  static isDueReview(
-    startProcessVal,
-    stopProbationDate,
-    targetDays = 15,
-    todayKey,
-    timeZone = "Asia/Ho_Chi_Minh",
-  ) {
+  static isDueReview(startProcessVal, stopProbationDate, targetDays = 15, todayKey, timeZone = "Asia/Ho_Chi_Minh") {
     if (!todayKey) return false;
 
     const todayObj = this.parseToDateObject(todayKey);
@@ -191,9 +183,7 @@ class ProbationReviewUtil {
         stopDateObj.setHours(0, 0, 0, 0);
 
         // Số ngày còn lại tính từ hôm nay tới ngày hết hạn thử việc
-        const diffDays = Math.round(
-          (stopDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24),
-        );
+        const diffDays = Math.round((stopDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
 
         // Nằm trong khoảng đếm ngược 15 ngày (từ 0 đến 15 ngày)
         // (diffDays >= 0 để tránh quét những người đã kết thúc thử việc từ lâu)
