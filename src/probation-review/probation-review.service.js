@@ -1,19 +1,13 @@
 /**
  * src/probation-review/probation-review.service.js
- * Service Pattern: Batch reading RAM, đối soát liên Sheet, tạo Draft/Gửi Email
- * Khóa dòng bằng Developer Metadata trực tiếp trên Sheet UC05 (Contract Tracking)
+ * Service: Đọc dữ liệu liên Sheet, lọc đúng hạn và lưu lịch sử vào tab "Probation Review Logs"
  */
-
 class ProbationReviewService {
-  /**
-   * Helper: Chuẩn hóa nhãn loại Review từ Employment Type
-   * Ví dụ: "Intern" -> "Intern", "Probation" -> "Probation", "Apprentice" -> "Apprentice"
-   */
   static resolveReviewTypeLabel_(empTypeRaw, contractTypeRaw) {
     const raw = `${empTypeRaw || ""} ${contractTypeRaw || ""}`.toLowerCase();
     if (raw.includes("intern")) return "Intern";
     if (raw.includes("apprentice")) return "Apprentice";
-    return "Probation"; // Mặc định là Probation
+    return "Probation";
   }
 
   /**
@@ -22,12 +16,9 @@ class ProbationReviewService {
   static loadOnboardingDataMap_() {
     const oConfig = PROBATION_REVIEW_CONFIG.ONBOARDING;
     const ss = SpreadsheetApp.openById(oConfig.SPREADSHEET_ID);
-
-    // Tìm sheet theo TAB_GID
     const sheets = ss.getSheets();
     const sheet = sheets.find((s) => String(s.getSheetId()) === String(oConfig.TAB_GID)) || sheets[0];
 
-    // Đọc đồng thời Giá trị và RichText (link ẩn) về RAM trong 1 lần gọi (Batch Read)
     const range = sheet.getDataRange();
     const data = range.getValues();
     const richTexts = range.getRichTextValues();
@@ -36,7 +27,6 @@ class ProbationReviewService {
       return { byEmail: new Map(), byName: new Map() };
     }
 
-    // Map vị trí index cột động từ dòng tiêu đề
     const headers = data[oConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
     const fullNameIdx = headers.indexOf(oConfig.COLS.FULL_NAME);
     const personalEmailIdx = headers.indexOf(oConfig.COLS.PERSONAL_EMAIL);
@@ -63,11 +53,7 @@ class ProbationReviewService {
       const workingEmail = ProbationReviewUtil.cleanEmail(row[workingEmailIdx]);
       const squad = String(row[squadIdx] || "").trim();
       const tribe = String(row[tribeIdx] || "").trim();
-
-      // Bóc tách URL Folder OKR (xử lý link ẩn trong cell hoặc chuỗi thô)
       const okrFolderUrl = okrFolderIdx >= 0 ? ProbationReviewUtil.extractCellUrl(row[okrFolderIdx], richTexts[r]?.[okrFolderIdx]) : "";
-
-      // Gộp Squad/Tribe chống trùng tên lặp lại
       const squadTribe = squad && tribe && squad.toLowerCase() === tribe.toLowerCase() ? squad : [squad, tribe].filter(Boolean).join(" / ");
 
       const record = {
@@ -89,17 +75,47 @@ class ProbationReviewService {
       if (workingEmail) byEmail.set(workingEmail, record);
       byName.set(fullName.toLowerCase(), record);
     }
-
     return { byEmail, byName };
   }
 
   /**
-   * 2. Chạy luồng quét đối soát và gửi mail / tạo draft
+   * 2. Lấy hoặc tạo Sheet lưu Log trên file UC05
+   */
+  static getOrCreateLogSheet_(ss) {
+    const LOG_TAB_NAME = "Probation Review Logs";
+    let logSheet = ss.getSheetByName(LOG_TAB_NAME);
+    if (!logSheet) {
+      logSheet = ss.insertSheet(LOG_TAB_NAME);
+      logSheet.appendRow(["Timestamp", "Row UC05", "Full Name", "Target Email", "Review Type", "Status", "Mode", "Subject"]);
+      logSheet.getRange("1:1").setFontWeight("bold");
+    }
+    return logSheet;
+  }
+
+  /**
+   * 3. Tải các bản ghi đã gửi từ tab Log về Set để tra cứu tức thì O(1)
+   */
+  static loadProcessedSetFromLog_(logSheet) {
+    const processedSet = new Set();
+    const data = logSheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const rowNum = data[i][1];
+      const email = String(data[i][3] || "")
+        .trim()
+        .toLowerCase();
+      if (rowNum && email) {
+        processedSet.add(`${rowNum}_${email}`);
+      }
+    }
+    return processedSet;
+  }
+
+  /**
+   * 4. Chạy luồng quét đối soát và gửi mail / tạo draft
    * @param {"draft"|"send"} mode
    */
   static runProbationReview(mode = "draft") {
     const tConfig = PROBATION_REVIEW_CONFIG.PROGRESS_TRACKING;
-    const metaPrefix = PROBATION_REVIEW_CONFIG.METADATA_KEY_PREFIX;
     const timeZone = PROBATION_REVIEW_CONFIG.TIMEZONE;
     const todayKey = ProbationReviewUtil.formatDateKey(new Date(), timeZone);
     const currentUserEmail = Session.getActiveUser().getEmail();
@@ -110,14 +126,16 @@ class ProbationReviewService {
           .replace(/\b\w/g, (c) => c.toUpperCase())
       : "Talent Development Team";
 
-    // 1. Tải dữ liệu Onboarding vào RAM Map
+    // 1. Nạp data Onboarding
     const { byEmail, byName } = this.loadOnboardingDataMap_();
 
-    // 2. Mở bảng UC05 (Contract Tracking)
+    // 2. Mở file UC05 và lấy danh sách đã chạy từ Log Sheet
     const ssUC05 = SpreadsheetApp.openById(tConfig.SPREADSHEET_ID);
     const sheetUC05 = ssUC05.getSheetByName(tConfig.TAB_NAME) || ssUC05.getSheets()[0];
-    const dataUC05 = sheetUC05.getDataRange().getValues();
+    const logSheet = this.getOrCreateLogSheet_(ssUC05);
+    const processedSet = this.loadProcessedSetFromLog_(logSheet);
 
+    const dataUC05 = sheetUC05.getDataRange().getValues();
     if (dataUC05.length < tConfig.DATA_START_ROW_INDEX) {
       return {
         ok: true,
@@ -126,21 +144,6 @@ class ProbationReviewService {
       };
     }
 
-    // 3. 🔒 Tải Developer Metadata của UC05 về RAM Set O(1) BẰNG FINDER (Quét sạch cả Sheet & Range)
-    const lockedMetadataSet = new Set();
-    try {
-      const finder = sheetUC05.createDeveloperMetadataFinder();
-      const allMetaUC05 = finder.find();
-      allMetaUC05.forEach((m) => {
-        const k = m.getKey();
-        if (k) lockedMetadataSet.add(k);
-      });
-      Logger.log(`🔒 Đã tải thành công ${lockedMetadataSet.size} khóa Metadata trên UC05.`);
-    } catch (errMeta) {
-      Logger.log("⚠️ Không tải được Metadata theo lô trên UC05: " + errMeta.message);
-    }
-
-    // Map các cột cần đọc từ tiêu đề dòng 1
     const headers = dataUC05[tConfig.HEADER_ROW_INDEX - 1].map(normalizeHeaderKey);
     const nameIdx = headers.indexOf(tConfig.COLS.FULL_NAME);
     const picIdx = headers.indexOf(tConfig.COLS.PIC);
@@ -158,9 +161,9 @@ class ProbationReviewService {
       errors: [],
     };
 
+    const newLogs = [];
     const startRow = tConfig.DATA_START_ROW_INDEX - 1;
 
-    // 4. Quét từng dòng dữ liệu trên UC05
     for (let r = startRow; r < dataUC05.length; r++) {
       const row = dataUC05[r];
       const sheetRowNumberUC05 = r + 1;
@@ -175,62 +178,48 @@ class ProbationReviewService {
 
       if (!rawName) continue;
 
-      // Tra cứu chéo sang Onboarding: ưu tiên Email nếu có, fallback sang Họ Tên
       let onboardingInfo = null;
       if (rawEmail) onboardingInfo = byEmail.get(rawEmail);
       if (!onboardingInfo && rawName) onboardingInfo = byName.get(rawName.toLowerCase());
 
-      // Xác định email gửi: Ưu tiên Personal Email (hoặc Working Email)
       const targetEmail = (onboardingInfo && onboardingInfo.personalEmail) || rawEmail || (onboardingInfo ? onboardingInfo.workingEmail : "");
-
       if (!targetEmail || !ProbationReviewUtil.isValidEmail(targetEmail)) {
         summary.skipped.push(`Dòng ${sheetRowNumberUC05} (${rawName}): Không tìm thấy Email hợp lệ.`);
         continue;
       }
 
-      // 🔒 Fast Check Lock Metadata trên RAM Set O(1)
-      const lockKey = `${metaPrefix}_${sheetRowNumberUC05}_${targetEmail.toLowerCase()}`;
-      if (lockedMetadataSet.has(lockKey)) {
-        continue; // Đã xử lý và khóa -> Bỏ qua ngay
+      // Kiểm tra xem dòng này và email này đã ghi log thành công chưa
+      const logKey = `${sheetRowNumberUC05}_${targetEmail.toLowerCase()}`;
+      if (processedSet.has(logKey)) {
+        continue; // Bỏ qua nếu đã xử lý
       }
 
-      // Kiểm tra mốc thời gian đến hạn (HR Ops - Start Process hoặc trước 15 ngày)
+      // Kiểm tra mốc ngày
       const stopDate = onboardingInfo ? onboardingInfo.stopProbationDate : null;
       const isDue = ProbationReviewUtil.isDueReview(rawStartProcess, stopDate, PROBATION_REVIEW_CONFIG.DAYS_BEFORE_STOP, todayKey, timeZone);
-
       if (!isDue) continue;
 
       try {
-        // Đọc Employment Type từ file Onboarding và phân loại đúng nhãn Review
         const reviewTypeName = this.resolveReviewTypeLabel_(onboardingInfo?.employmentType, rawContractType);
         const reviewTypeLower = reviewTypeName.toLowerCase();
-
-        // Cấu trúc Subject: [ReviewType] Review - [Employee Name] | [Title] | [Squad/Tribe]
         const titleStr = onboardingInfo?.title || "";
         const squadTribeStr = onboardingInfo?.squadTribe || "";
         const metaSuffix = [titleStr, squadTribeStr].filter(Boolean).join(" | ");
         const subject = `${reviewTypeName} Review - ${rawName}${metaSuffix ? ` | ${metaSuffix}` : ""}`;
 
-        // Danh sách CC: Line Manager, Dot Line Manager, people@kyanon.digital, TD in charge
+        // Danh sách CC
         const tdEmail = ProbationReviewUtil.cleanEmail(rawPic);
         const ccSet = new Set();
         if (onboardingInfo?.lineManager) ccSet.add(onboardingInfo.lineManager);
         if (onboardingInfo?.dotLineManager) ccSet.add(onboardingInfo.dotLineManager);
         ccSet.add(PROBATION_REVIEW_CONFIG.EMAIL.PEOPLE_TEAM_EMAIL);
         if (tdEmail) ccSet.add(tdEmail);
-
-        // Loại bỏ chính email người nhận khỏi danh sách CC
         ccSet.delete(targetEmail.toLowerCase());
         const ccList = Array.from(ccSet).join(", ");
 
-        // Format mốc thời gian:
-        // DD/MM/YYYY thứ 1: Ngày kết thúc thử việc (từ Onboarding UC03)
         const stopProbationDisplay = onboardingInfo ? onboardingInfo.stopProbationDisplayDate : "[DD/MM/YYYY]";
-
-        // DD/MM/YYYY thứ 2: Hạn chót từ cột HR Ops Consolidation (từ UC05)
         const consolidationDisplay = rawConsolidation ? ProbationReviewUtil.formatDisplayDate(rawConsolidation, timeZone) : stopProbationDisplay;
 
-        // Render HTML Email Template
         const template = HtmlService.createTemplateFromFile("probation-review/probation-review-email");
         template.fullName = rawName;
         template.reviewTypeName = reviewTypeName;
@@ -241,7 +230,6 @@ class ProbationReviewService {
         template.senderName = senderName;
 
         const htmlBody = template.evaluate().getContent();
-
         const mailOptions = {
           htmlBody: htmlBody,
           cc: ccList || undefined,
@@ -253,12 +241,7 @@ class ProbationReviewService {
           GmailApp.createDraft(targetEmail, subject, "", mailOptions);
         }
 
-        // 🔒 KHÓA DÒNG BẰNG DEVELOPER METADATA TRÊN SHEET UC05 (CẢ 2 CẤP ĐỘ ĐỂ BẢO ĐẢM KHÔNG BAO GIỜ LỌT)
-        sheetUC05.addDeveloperMetadata(lockKey, "COMPLETED");
-        sheetUC05.getRange(`${sheetRowNumberUC05}:${sheetRowNumberUC05}`).addDeveloperMetadata(lockKey, "COMPLETED");
-
-        lockedMetadataSet.add(lockKey);
-
+        // Tăng biến đếm và lưu trạng thái thành công
         summary.processedCount++;
         summary.processed.push({
           rowUC05: sheetRowNumberUC05,
@@ -271,9 +254,18 @@ class ProbationReviewService {
           consolidationDate: consolidationDisplay,
           folderUrl: onboardingInfo?.okrFolderUrl || "",
         });
+
+        // Chuẩn bị dòng log
+        newLogs.push([new Date(), sheetRowNumberUC05, rawName, targetEmail, reviewTypeName, "SUCCESS", mode.toUpperCase(), subject]);
+        processedSet.add(logKey);
       } catch (err) {
         summary.errors.push(`Dòng ${sheetRowNumberUC05} (${rawName}): ${err.message}`);
       }
+    }
+
+    // Ghi batch vào tab Log
+    if (newLogs.length > 0) {
+      logSheet.getRange(logSheet.getLastRow() + 1, 1, newLogs.length, newLogs[0].length).setValues(newLogs);
     }
 
     summary.message = `Đã ${mode === "send" ? "gửi" : "tạo draft"} thành công cho ${summary.processedCount} nhân sự trên UC05.`;
