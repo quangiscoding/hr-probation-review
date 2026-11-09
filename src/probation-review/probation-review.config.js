@@ -2,6 +2,21 @@
  * src/probation-review/probation-review.config.js
  * Cấu hình độc lập cho module Probation Review
  */
+
+// 👉 ĐỔI DUY NHẤT Ở ĐÂY: true = Chạy Sheet Dev, false = Chạy Sheet Prod
+const IS_DEV = true; // Đổi thành true khi bạn dev trên sheet test riêng
+
+const UC05_SHEETS = {
+  DEV: {
+    SPREADSHEET_ID: "1GfKcHWr0b98ZhRMDuQ-WXUj8FJxzLGgo4KS-jkkhqNo", // Thay ID sheet test vào đây
+    TAB_NAME: "Contract Tracking",
+  },
+  PROD: {
+    SPREADSHEET_ID: "1oAzOciyfA_b91aPz14jN-O-crGLyqoegBGFwurbggLA",
+    TAB_NAME: "Contract Tracking",
+  },
+};
+
 function normalizeHeaderKey(str) {
   if (!str) return "";
   return String(str)
@@ -15,12 +30,14 @@ function normalizeHeaderKey(str) {
 const PROBATION_REVIEW_CONFIG = {
   DAYS_BEFORE_STOP: 15,
   TIMEZONE: "Asia/Ho_Chi_Minh",
-  METADATA_KEY_PREFIX: "PROBATION_REVIEW",
+
+  // Tự đổi prefix theo môi trường để test trên Dev không ảnh hưởng/khóa nhầm dữ liệu Prod
+  METADATA_KEY_PREFIX: IS_DEV ? "PROBATION_REVIEW_DEV" : "PROBATION_REVIEW",
 
   // 1. SHEET UC05 (Bảng điều khiển: Progress Tracking / Contract Tracking)
   PROGRESS_TRACKING: {
-    SPREADSHEET_ID: "1oAzOciyfA_b91aPz14jN-O-crGLyqoegBGFwurbggLA",
-    TAB_NAME: "Contract Tracking",
+    SPREADSHEET_ID: IS_DEV ? UC05_SHEETS.DEV.SPREADSHEET_ID : UC05_SHEETS.PROD.SPREADSHEET_ID,
+    TAB_NAME: IS_DEV ? UC05_SHEETS.DEV.TAB_NAME : UC05_SHEETS.PROD.TAB_NAME,
     TAB_GID: "0",
     HEADER_ROW_INDEX: 1,
     DATA_START_ROW_INDEX: 2,

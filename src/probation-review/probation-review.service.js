@@ -126,16 +126,16 @@ class ProbationReviewService {
       };
     }
 
-    // 3. Tải Developer Metadata của UC05 về RAM Set O(1)
+    // 3. 🔒 Tải Developer Metadata của UC05 về RAM Set O(1) BẰNG FINDER (Quét sạch cả Sheet & Range)
     const lockedMetadataSet = new Set();
     try {
-      const allMetaUC05 = sheetUC05.getDeveloperMetadata();
+      const finder = sheetUC05.createDeveloperMetadataFinder();
+      const allMetaUC05 = finder.find();
       allMetaUC05.forEach((m) => {
         const k = m.getKey();
-        const v = m.getValue();
         if (k) lockedMetadataSet.add(k);
-        if (v) lockedMetadataSet.add(v);
       });
+      Logger.log(`🔒 Đã tải thành công ${lockedMetadataSet.size} khóa Metadata trên UC05.`);
     } catch (errMeta) {
       Logger.log("⚠️ Không tải được Metadata theo lô trên UC05: " + errMeta.message);
     }
@@ -188,10 +188,10 @@ class ProbationReviewService {
         continue;
       }
 
-      // 🔒 Fast Check Lock Metadata trên RAM
+      // 🔒 Fast Check Lock Metadata trên RAM Set O(1)
       const lockKey = `${metaPrefix}_${sheetRowNumberUC05}_${targetEmail.toLowerCase()}`;
       if (lockedMetadataSet.has(lockKey)) {
-        continue;
+        continue; // Đã xử lý và khóa -> Bỏ qua ngay
       }
 
       // Kiểm tra mốc thời gian đến hạn (HR Ops - Start Process hoặc trước 15 ngày)
@@ -253,8 +253,10 @@ class ProbationReviewService {
           GmailApp.createDraft(targetEmail, subject, "", mailOptions);
         }
 
-        // 🔒 KHÓA DÒNG BẰNG DEVELOPER METADATA TRÊN SHEET UC05 (CÚ PHÁP ENTIRE ROW CHUẨN)
-        sheetUC05.getRange(`${sheetRowNumberUC05}:${sheetRowNumberUC05}`).addDeveloperMetadata(lockKey, new Date().toISOString());
+        // 🔒 KHÓA DÒNG BẰNG DEVELOPER METADATA TRÊN SHEET UC05 (CẢ 2 CẤP ĐỘ ĐỂ BẢO ĐẢM KHÔNG BAO GIỜ LỌT)
+        sheetUC05.addDeveloperMetadata(lockKey, "COMPLETED");
+        sheetUC05.getRange(`${sheetRowNumberUC05}:${sheetRowNumberUC05}`).addDeveloperMetadata(lockKey, "COMPLETED");
+
         lockedMetadataSet.add(lockKey);
 
         summary.processedCount++;
