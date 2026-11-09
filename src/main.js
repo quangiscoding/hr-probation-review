@@ -3,8 +3,8 @@
  */
 
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu("Probation Catch-up")
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu("Probation Catch-up")
     .addItem("Enable reminders and HR form emails", "installTriggers")
     .addItem("Enable reminder drafts", "installDraftTriggers")
     .addItem("Disable automation", "disableTriggers")
@@ -12,14 +12,10 @@ function onOpen() {
     .addItem("Send reminders now", "sendReminders")
     .addItem("Send HR review emails now", "sendHrEmails")
     .addToUi();
-  SpreadsheetApp.getUi()
-    .createMenu("🚀 Probation Review")
+  ui.createMenu("🚀 Probation Review")
     .addItem("1. Chạy thủ công tạo Draft ngay bây giờ", "menuRunDraftNow")
     .addSeparator()
-    .addItem(
-      "⏰ Bật tự động tạo Draft hàng ngày (Auto 8:00 AM)",
-      "installDailyDraftTrigger",
-    )
+    .addItem("⏰ Bật tự động tạo Draft hàng ngày (Auto 8:00 AM)", "installDailyDraftTrigger")
     .addItem("🛑 Tắt tự động tạo Draft", "uninstallDailyDraftTrigger")
     .addToUi();
 }
@@ -29,11 +25,7 @@ function onOpen() {
  */
 function menuRunDraftNow() {
   const result = ProbationReviewService.runProbationReview("draft");
-  SpreadsheetApp.getUi().alert(
-    "Kết quả quét",
-    result.message,
-    SpreadsheetApp.getUi().ButtonSet.OK,
-  );
+  SpreadsheetApp.getUi().alert("Kết quả quét", result.message, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /**
@@ -67,11 +59,7 @@ function installDailyDraftTrigger() {
     .nearMinute(51) // 👈 Thêm phút tại đây (0, 15, 30, 45,...)
     .create();
 
-  SpreadsheetApp.getUi().alert(
-    "Đã bật tự động!",
-    "Hệ thống sẽ tự động quét và tạo bản nháp (Draft) vào khoảng 08:30 sáng mỗi ngày.",
-    SpreadsheetApp.getUi().ButtonSet.OK,
-  );
+  SpreadsheetApp.getUi().alert("Đã bật tự động!", "Hệ thống sẽ tự động quét và tạo bản nháp (Draft) vào khoảng 08:30 sáng mỗi ngày.", SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /**
@@ -89,9 +77,5 @@ function uninstallDailyDraftTrigger() {
     }
   }
 
-  SpreadsheetApp.getUi().alert(
-    "Đã tắt tự động",
-    `Đã hủy bỏ ${count} trình kích hoạt tự động.`,
-    SpreadsheetApp.getUi().ButtonSet.OK,
-  );
+  SpreadsheetApp.getUi().alert("Đã tắt tự động", `Đã hủy bỏ ${count} trình kích hoạt tự động.`, SpreadsheetApp.getUi().ButtonSet.OK);
 }
