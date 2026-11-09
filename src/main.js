@@ -76,24 +76,24 @@ function uninstallDailyDraftTrigger() {
 }
 
 /**
- * DỌN SẠCH TOÀN BỘ KHÓA DEVELOPER METADATA CỦA PROBATION REVIEW ĐỂ TEST LẠI
+ * Hàm test: Tạo trigger tự động kích hoạt sau đúng 1 phút
  */
-function dev_resetAllProbationLocks() {
-  const tConfig = PROBATION_REVIEW_CONFIG.PROGRESS_TRACKING;
-  const ss = SpreadsheetApp.openById(tConfig.SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(tConfig.TAB_NAME) || ss.getSheets()[0];
+function test_installTriggerAfter1Minute() {
+  const triggerName = "cron_autoDraftProbationReview";
 
-  const finder = sheet.createDeveloperMetadataFinder();
-  const allMeta = finder.find();
-
-  let removedCount = 0;
-  allMeta.forEach((meta) => {
-    if (meta.getKey().startsWith(PROBATION_REVIEW_CONFIG.METADATA_KEY_PREFIX)) {
-      meta.remove();
-      removedCount++;
+  // Xóa trigger cũ để tránh chạy trùng lặp
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let t of triggers) {
+    if (t.getHandlerFunction() === triggerName) {
+      ScriptApp.deleteTrigger(t);
     }
-  });
+  }
 
-  Logger.log(`🧹 Đã xóa thành công ${removedCount} khóa Developer Metadata của Probation Review trên UC05.`);
-  return removedCount;
+  // Tối thiểu của Google là 1 phút (60.000 ms)
+  ScriptApp.newTrigger(triggerName)
+    .timeBased()
+    .after(60 * 1000)
+    .create();
+
+  Logger.log("⏳ Đã tạo trigger test! Hãy đợi tầm 1 - 2 phút rồi vào tab Trình thực thi (Executions) kiểm tra nhé.");
 }
