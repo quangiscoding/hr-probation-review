@@ -221,3 +221,16 @@ function test_checkProbationUtils() {
   Logger.log(`TỔNG KẾT: ${tests.length - totalFailed}/${tests.length} tests passed.`);
   return { total: tests.length, failed: totalFailed, details: tests };
 }
+
+/**
+ * Hàm test chạy thử ở chế độ tạo Nháp (Draft)
+ * Giúp bạn kiểm tra xem code có quét đúng người, có chặn thiếu OKR/Email và báo cáo đúng không.
+ */
+function test_runProbationReview_Draft() {
+  Logger.log("🚀 Bắt đầu chạy test Probation Review (Draft Mode)...");
+
+  const result = ProbationReviewService.runProbationReview("draft");
+
+  Logger.log("📊 KẾT QUẢ TRẢ VỀ:");
+  Logger.log(JSON.stringify(result, null, 2));
+}

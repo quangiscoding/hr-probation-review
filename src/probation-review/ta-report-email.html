@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #333333;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 10px;
+      }
+      .section-title {
+        font-weight: bold;
+        margin-top: 20px;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+      .success-title {
+        color: #2e7d32;
+      }
+      .warning-title {
+        color: #f57c00;
+      }
+      .error-title {
+        color: #c62828;
+      }
+
+      ul {
+        padding-left: 20px;
+        margin: 0 0 16px 0;
+      }
+      li {
+        margin-bottom: 6px;
+      }
+      .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+        border-top: 2px solid #ef403e;
+        border-bottom: 1px solid #eeeeee;
+      }
+      .summary-table td {
+        padding: 8px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <p style="margin: 0 0 12px 0">Hi Talent Development Team,</p>
+      <p style="margin: 0 0 12px 0">
+        Hệ thống vừa hoàn tất quá trình tự động quét và xử lý lịch trình đánh giá thử việc (Mode: <strong style="text-transform: uppercase"><?= mode ?></strong>).
+      </p>
+
+      <!-- Bảng tổng quan thống kê -->
+      <table class="summary-table">
+        <tr>
+          <td style="color: #666666; width: 160px">Tổng số thành công:</td>
+          <td style="font-weight: bold; color: #2e7d32"><?= processedCount ?></td>
+        </tr>
+        <tr>
+          <td style="color: #666666">Cần bổ sung thông tin:</td>
+          <td style="font-weight: bold; color: #f57c00"><?= warnings ? warnings.length : 0 ?></td>
+        </tr>
+        <tr>
+          <td style="color: #666666">Lỗi phát sinh:</td>
+          <td style="font-weight: bold; color: #c62828"><?= errors ? errors.length : 0 ?></td>
+        </tr>
+      </table>
+
+      <!-- Danh sách thành công -->
+      <? if (processed && processed.length > 0) { ?>
+      <div class="section-title success-title">✅ Đã tạo/gửi thành công:</div>
+      <ul>
+        <? for (var i = 0; i < processed.length; i++) { ?>
+        <li>
+          <b><?= processed[i].name ?></b> (<?= processed[i].email ?>) - <span style="color: #666666"><?= processed[i].type ?></span>
+        </li>
+        <? } ?>
+      </ul>
+      <? } ?>
+
+      <!-- Danh sách cảnh báo / thiếu thông tin -->
+      <? if (warnings && warnings.length > 0) { ?>
+      <div class="section-title warning-title">⚠️ Cần bổ sung thông tin (Tạm hoãn):</div>
+      <ul>
+        <? for (var i = 0; i < warnings.length; i++) { ?>
+        <li>
+          <b><?= warnings[i].name ?></b> (Dòng <?= warnings[i].row ?>): <span style="color: #d32f2f"><?= warnings[i].reason ?></span>
+        </li>
+        <? } ?>
+      </ul>
+      <? } ?>
+
+      <!-- Danh sách lỗi -->
+      <? if (errors && errors.length > 0) { ?>
+      <div class="section-title error-title">❌ Lỗi hệ thống:</div>
+      <ul>
+        <? for (var i = 0; i < errors.length; i++) { ?>
+        <li><?= errors[i] ?></li>
+        <? } ?>
+      </ul>
+      <? } ?>
+
+      <p style="margin: 20px 0 0 0">Em cảm ơn team!</p>
+    </div>
+  </body>
+</html>
