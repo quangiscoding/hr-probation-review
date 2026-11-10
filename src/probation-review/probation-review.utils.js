@@ -118,32 +118,53 @@ class ProbationReviewUtil {
   }
 
   /**
-   * KIỂM TRA ĐIỀU KIỆN ĐẾN HẠN ĐÁNH GIÁ (Chỉ khớp đúng ngày hôm nay)
-   * 1. Nếu có mốc HR Ops - Start Process: ngày đó phải bằng đúng hôm nay.
-   * 2. Nếu không có mốc Start Process: Stop probation trừ 15 ngày phải bằng đúng hôm nay.
+   * KIỂM TRA ĐIỀU KIỆN ĐẾN HẠN ĐÁNH GIÁ
+   * @param {Date|string} startProcessVal - Cột H (UC05)
+   * @param {Date|string} stopProbationDate - Cột R (UC03)
+   * @param {number} targetDays - Mặc định trước 15 ngày
+   * @param {string} todayKey - yyyy-MM-dd hôm nay
+   * @param {number} maxOverdueDays - Số ngày trễ tối đa cho phép quét bù (mặc định 3 ngày)
    */
-  static isDueReview(startProcessVal, stopProbationDate, targetDays = 15, todayKey, timeZone = "Asia/Ho_Chi_Minh") {
+  static isDueReview(startProcessVal, stopProbationDate, targetDays = 15, todayKey, timeZone = "Asia/Ho_Chi_Minh", maxOverdueDays = 3) {
     if (!todayKey) return false;
     const todayObj = this.parseToDateObject(todayKey);
     if (!todayObj) return false;
     todayObj.setHours(0, 0, 0, 0);
 
-    // Ưu tiên 1: Cột HR Ops - Start Process khớp đúng ngày hôm nay
+    // ƯU TIÊN 1: Cột HR Ops - Start Process
     if (startProcessVal) {
       const startProcessObj = this.parseToDateObject(startProcessVal);
       if (startProcessObj) {
         startProcessObj.setHours(0, 0, 0, 0);
-        return startProcessObj.getTime() === todayObj.getTime();
+
+        // Số ngày đã trôi qua kể từ ngày Start Process
+        const daysPast = Math.round((todayObj.getTime() - startProcessObj.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Chỉ chấp nhận: Đúng hôm nay (daysPast === 0) hoặc trễ không quá 3 ngày (1 <= daysPast <= 3)
+        // Nếu daysPast < 0 nghĩa là ngày trong tương lai (chưa đến hạn) -> Bỏ qua
+        // Nếu daysPast > 3 nghĩa là quá khứ xa -> Bỏ qua
+        if (daysPast >= 0 && daysPast <= maxOverdueDays) {
+          return true;
+        }
       }
     }
 
-    // Ưu tiên 2: Mốc Stop probation lùi đúng 15 ngày
-    if (stopProbationDate) {
+    // ƯU TIÊN 2: Cột Stop probation (chỉ xét khi cột Start Process không có)
+    if (!startProcessVal && stopProbationDate) {
       const stopDateObj = this.parseToDateObject(stopProbationDate);
       if (stopDateObj) {
         stopDateObj.setHours(0, 0, 0, 0);
-        const diffDays = Math.round((stopDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
-        return diffDays === targetDays;
+
+        // Số ngày còn lại đến khi kết thúc thử việc
+        const daysRemaining = Math.round((stopDateObj.getTime() - todayObj.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Cửa sổ hợp lệ: Còn từ 12 đến 15 ngày (targetDays - maxOverdueDays đến targetDays)
+        // Ví dụ: Chuẩn là còn 15 ngày. Nếu dính cuối tuần thì còn 14, 13, 12 ngày vẫn quét bù.
+        // Ít hơn 12 ngày hoặc đã âm (quá hạn thử việc) -> Bỏ qua
+        const minDaysRemaining = targetDays - maxOverdueDays;
+        if (daysRemaining <= targetDays && daysRemaining >= minDaysRemaining) {
+          return true;
+        }
       }
     }
 
