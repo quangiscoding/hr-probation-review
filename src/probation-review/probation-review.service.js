@@ -33,6 +33,9 @@ class ProbationReviewService {
    *   - byName:  Tìm thông tin dự phòng bằng Họ và Tên (nếu bên UC05 thiếu email)
    * Kỹ thuật: Dùng getDataRange() & getRichTextValues() để đọc 1 lần toàn bộ bảng (Batch Read).
    */
+  /**
+   * 1. Đọc Onboarding Sheet (UC03) về RAM Map tra cứu O(1)
+   */
   static loadOnboardingDataMap_() {
     const oConfig = PROBATION_REVIEW_CONFIG.ONBOARDING;
     const ss = SpreadsheetApp.openById(oConfig.SPREADSHEET_ID);
@@ -59,6 +62,7 @@ class ProbationReviewService {
     const lmIdx = headers.indexOf(oConfig.COLS.LINE_MANAGER);
     const dlmIdx = headers.indexOf(oConfig.COLS.DOT_LINE_MANAGER);
     const empTypeIdx = headers.indexOf(oConfig.COLS.EMPLOYMENT_TYPE);
+    const taIdx = headers.indexOf(oConfig.COLS.TA_IN_CHARGE); // 👈 Bổ sung đọc cột TA In Charge
 
     const byEmail = new Map();
     const byName = new Map();
@@ -73,9 +77,9 @@ class ProbationReviewService {
       const workingEmail = ProbationReviewUtil.cleanEmail(row[workingEmailIdx]);
       const squad = String(row[squadIdx] || "").trim();
       const tribe = String(row[tribeIdx] || "").trim();
-
       const okrFolderUrl = okrFolderIdx >= 0 ? ProbationReviewUtil.extractCellUrl(row[okrFolderIdx], richTexts[r]?.[okrFolderIdx]) : "";
       const squadTribe = squad && tribe && squad.toLowerCase() === tribe.toLowerCase() ? squad : [squad, tribe].filter(Boolean).join(" / ");
+      const taInCharge = taIdx >= 0 ? ProbationReviewUtil.cleanEmail(row[taIdx]) : ""; // 👈 Lấy email TA In Charge
 
       const record = {
         fullName,
@@ -90,13 +94,13 @@ class ProbationReviewService {
         lineManager: ProbationReviewUtil.cleanEmail(row[lmIdx]),
         dotLineManager: ProbationReviewUtil.cleanEmail(row[dlmIdx]),
         employmentType: String(row[empTypeIdx] || "").trim(),
+        taInCharge: taInCharge, // 👈 Lưu vào record để CC
       };
 
       if (personalEmail) byEmail.set(personalEmail, record);
       if (workingEmail) byEmail.set(workingEmail, record);
       byName.set(fullName.toLowerCase(), record);
     }
-
     return { byEmail, byName };
   }
 
@@ -143,20 +147,22 @@ class ProbationReviewService {
    * Gửi email báo cáo tổng kết sau khi phiên cron quét hoàn tất
    * Gọi HTML Template từ file external "probation-review/ta-report-email"
    */
-  static sendSummaryReportToTA_(summary, notifyEmails) {
-    if (!notifyEmails || notifyEmails.length === 0) return;
-
-    // Không gửi mail rác nếu phiên chạy không có biến động nào (0 thành công, 0 cảnh báo, 0 lỗi)
+  /**
+   * 2. THÔNG BÁO: Gửi email báo cáo tổng hợp chỉ cho người thao tác (PIC) & CC TA In Charge
+   */
+  static sendSummaryReportToTA_(summary, currentUserEmail, relatedTaEmails = []) {
+    if (!currentUserEmail) return;
     if (summary.processedCount === 0 && summary.warnings.length === 0 && summary.errors.length === 0) {
       return;
     }
 
     const todayStr = ProbationReviewUtil.formatDisplayDate(new Date());
     const subject = `[Hera | Auto-Report] Báo cáo quét Probation Review ngày ${todayStr}`;
+    const picAllocCode = currentUserEmail.split("@")[0].trim(); // Tách lấy "quang.nguyenminh"
 
     try {
-      // Gọi file template HTML external
       const template = HtmlService.createTemplateFromFile("probation-review/ta-report-email");
+      template.picAllocCode = picAllocCode; // 👈 Truyền Alloc Code vào HTML Template
       template.mode = summary.mode;
       template.processedCount = summary.processedCount;
       template.processed = summary.processed;
@@ -164,7 +170,13 @@ class ProbationReviewService {
       template.errors = summary.errors;
 
       const htmlBody = template.evaluate().getContent();
-      GmailApp.sendEmail(notifyEmails.join(", "), subject, "", { htmlBody: htmlBody });
+      const mailOptions = { htmlBody: htmlBody };
+
+      if (relatedTaEmails && relatedTaEmails.length > 0) {
+        mailOptions.cc = relatedTaEmails.join(", ");
+      }
+
+      GmailApp.sendEmail(currentUserEmail, subject, "", mailOptions);
     } catch (err) {
       Logger.log(`⚠️ Không thể gửi email báo cáo cho TA/PIC: ${err.message}`);
     }
@@ -177,12 +189,17 @@ class ProbationReviewService {
    * Quét bảng UC05, lọc danh sách đến hạn và thực thi tạo Draft hoặc gửi Email
    * @param {"draft"|"send"} mode - "draft": tạo thư nháp trong Gmail; "send": gửi thật
    */
+  /**
+   * 3. CHẶNG 3: LUỒNG QUÉT CHÍNH (Lọc đúng PIC thao tác + CC TA In Charge)
+   */
   static runProbationReview(mode = "draft") {
     const tConfig = PROBATION_REVIEW_CONFIG.PROGRESS_TRACKING;
     const timeZone = PROBATION_REVIEW_CONFIG.TIMEZONE;
     const todayKey = ProbationReviewUtil.formatDateKey(new Date(), timeZone);
 
-    const currentUserEmail = Session.getActiveUser().getEmail();
+    // 🔴 Lấy username/allocCode người đang bấm nút thao tác
+    const currentUserEmail = Session.getActiveUser().getEmail().toLowerCase().trim();
+    const currentAllocCode = currentUserEmail.split("@")[0].trim();
     const senderName = currentUserEmail
       ? currentUserEmail
           .split("@")[0]
@@ -190,10 +207,8 @@ class ProbationReviewService {
           .replace(/\b\w/g, (c) => c.toUpperCase())
       : "Talent Development Team";
 
-    // 1. Tải Map Onboarding từ UC03 vào RAM
     const { byEmail, byName } = this.loadOnboardingDataMap_();
 
-    // 2. Mở file UC05 & Chuẩn bị Set tra cứu chống gửi trùng
     const ssUC05 = SpreadsheetApp.openById(tConfig.SPREADSHEET_ID);
     const sheetUC05 = ssUC05.getSheetByName(tConfig.TAB_NAME) || ssUC05.getSheets()[0];
     const logSheet = this.getOrCreateLogSheet_(ssUC05);
@@ -217,18 +232,15 @@ class ProbationReviewService {
       mode: mode,
       processedCount: 0,
       processed: [],
-      warnings: [], // Gom danh sách cảnh báo thiếu email / thiếu link OKR
+      warnings: [],
       skipped: [],
       errors: [],
     };
 
     const newLogs = [];
-    const taNotificationEmails = new Set(); // Tập hợp danh sách email TA/PIC nhận báo cáo
-    if (currentUserEmail) taNotificationEmails.add(currentUserEmail);
-
+    const relatedTaSet = new Set(); // Tập hợp TA In Charge để CC vào mail báo cáo
     const startRow = tConfig.DATA_START_ROW_INDEX - 1;
 
-    // 3. Duyệt từng dòng nhân sự trên UC05
     for (let r = startRow; r < dataUC05.length; r++) {
       const row = dataUC05[r];
       const sheetRowNumberUC05 = r + 1;
@@ -243,59 +255,50 @@ class ProbationReviewService {
 
       if (!rawName) continue;
 
+      // 🔴 BỘ LỌC PIC BẮT BUỘC: Bỏ qua nếu dòng này không thuộc quyền quản lý của người bấm nút
       const picEmail = ProbationReviewUtil.cleanEmail(rawPic);
-      if (picEmail) taNotificationEmails.add(picEmail);
+      const picAllocCode = picEmail ? picEmail.split("@")[0].toLowerCase() : rawPic.toLowerCase().trim();
 
-      // Tra cứu chéo sang Onboarding UC03
+      if (picAllocCode !== currentAllocCode && picEmail !== currentUserEmail) {
+        continue;
+      }
+
       let onboardingInfo = null;
       if (rawEmail) onboardingInfo = byEmail.get(rawEmail);
       if (!onboardingInfo && rawName) onboardingInfo = byName.get(rawName.toLowerCase());
 
+      if (onboardingInfo?.taInCharge) {
+        relatedTaSet.add(onboardingInfo.taInCharge);
+      }
+
       const targetEmail = (onboardingInfo && onboardingInfo.personalEmail) || rawEmail || (onboardingInfo ? onboardingInfo.workingEmail : "");
 
-      // ----------------------------------------------------
-      // KIỂM TRA 1: TÍNH HỢP LỆ CỦA EMAIL
-      // ----------------------------------------------------
       if (!targetEmail || !ProbationReviewUtil.isValidEmail(targetEmail)) {
         summary.warnings.push({
           row: sheetRowNumberUC05,
           name: rawName,
-          reason: "Không tìm thấy Email hợp lệ trên cả UC05 và Onboarding UC03.",
+          reason: "Không tìm thấy Email hợp lệ trên cả file UC05 và File Onboarding.",
         });
         continue;
       }
 
-      // ----------------------------------------------------
-      // KIỂM TRA 2: CHỐNG GỬI TRÙNG LẶP
-      // ----------------------------------------------------
       const logKey = `${sheetRowNumberUC05}_${targetEmail.toLowerCase()}`;
-      if (processedSet.has(logKey)) {
-        continue; // Đã từng gửi thành công -> Bỏ qua
-      }
+      if (processedSet.has(logKey)) continue;
 
-      // ----------------------------------------------------
-      // KIỂM TRA 3: MỐC NGÀY ĐẾN HẠN ĐÁNH GIÁ
-      // ----------------------------------------------------
       const stopDate = onboardingInfo ? onboardingInfo.stopProbationDate : null;
       const isDue = ProbationReviewUtil.isDueReview(rawStartProcess, stopDate, PROBATION_REVIEW_CONFIG.DAYS_BEFORE_STOP, todayKey, timeZone);
-      if (!isDue) continue; // Chưa tới ngày hoặc đã quá hạn xa -> Bỏ qua
+      if (!isDue) continue;
 
-      // ----------------------------------------------------
-      // KIỂM TRA 4: THIẾU LINK FOLDER OKRS
-      // ----------------------------------------------------
       const okrFolderUrl = onboardingInfo ? onboardingInfo.okrFolderUrl : "";
       if (!okrFolderUrl) {
         summary.warnings.push({
           row: sheetRowNumberUC05,
           name: rawName,
-          reason: "Đã đến hạn đánh giá nhưng thiếu Link Folder OKRs trên UC03. Tạm hoãn tạo Draft.",
+          reason: "Thiếu Link Folder OKRs trên File Onboarding.",
         });
-        continue; // Tạm hoãn, chờ TA bổ sung link để quét lại vào ngày tiếp theo
+        continue;
       }
 
-      // ===================================================================================
-      // THỰC THI: SOẠN VÀ GỬI / TẠO DRAFT EMAIL
-      // ===================================================================================
       try {
         const reviewTypeName = this.resolveReviewTypeLabel_(onboardingInfo?.employmentType, rawContractType);
         const reviewTypeLower = reviewTypeName.toLowerCase();
@@ -305,11 +308,14 @@ class ProbationReviewService {
         const metaSuffix = [titleStr, squadTribeStr].filter(Boolean).join(" | ");
         const subject = `${reviewTypeName} Review - ${rawName}${metaSuffix ? ` | ${metaSuffix}` : ""}`;
 
+        // 🔴 CC: Line Manager + Dot Line Manager + People Team + PIC (bạn) + TA In Charge (từ UC03)
         const ccSet = new Set();
         if (onboardingInfo?.lineManager) ccSet.add(onboardingInfo.lineManager);
         if (onboardingInfo?.dotLineManager) ccSet.add(onboardingInfo.dotLineManager);
         ccSet.add(PROBATION_REVIEW_CONFIG.EMAIL.PEOPLE_TEAM_EMAIL);
         if (picEmail) ccSet.add(picEmail);
+        if (onboardingInfo?.taInCharge) ccSet.add(onboardingInfo.taInCharge); // 👈 CC thêm TA In Charge
+
         ccSet.delete(targetEmail.toLowerCase());
         const ccList = Array.from(ccSet).join(", ");
 
@@ -355,15 +361,14 @@ class ProbationReviewService {
       }
     }
 
-    // Batch Insert log lượt xử lý thành công
     if (newLogs.length > 0) {
       logSheet.getRange(logSheet.getLastRow() + 1, 1, newLogs.length, newLogs[0].length).setValues(newLogs);
     }
 
-    // Tự động bắn email báo cáo tổng hợp kết quả cho TA/PIC
-    this.sendSummaryReportToTA_(summary, Array.from(taNotificationEmails));
+    // 🔴 Gửi Auto-Report trực tiếp cho người bấm chạy và CC các TA In Charge liên quan
+    this.sendSummaryReportToTA_(summary, currentUserEmail, Array.from(relatedTaSet));
 
-    summary.message = `Đã ${mode === "send" ? "gửi" : "tạo draft"} thành công cho ${summary.processedCount} nhân sự trên UC05.`;
+    summary.message = `Đã ${mode === "send" ? "gửi" : "tạo draft"} thành công cho ${summary.processedCount} nhân sự do bạn (${currentAllocCode}) phụ trách.`;
     return summary;
   }
 }

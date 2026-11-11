@@ -13,7 +13,7 @@
       }
       .container {
         max-width: 600px;
-        margin: 0 auto;
+        margin: 0;
         padding: 10px;
       }
       .section-title {
@@ -31,7 +31,6 @@
       .error-title {
         color: #c62828;
       }
-
       ul {
         padding-left: 20px;
         margin: 0 0 16px 0;
@@ -53,7 +52,9 @@
   </head>
   <body>
     <div class="container">
-      <p style="margin: 0 0 12px 0">Hi Talent Development Team,</p>
+      <p style="margin: 0 0 12px 0">
+        Hi bạn <b><?= picAllocCode ?></b>,
+      </p>
       <p style="margin: 0 0 12px 0">
         Hệ thống vừa hoàn tất quá trình tự động quét và xử lý lịch trình đánh giá thử việc (Mode: <strong style="text-transform: uppercase"><?= mode ?></strong>).
       </p>
@@ -108,7 +109,7 @@
       </ul>
       <? } ?>
 
-      <p style="margin: 20px 0 0 0">Em cảm ơn team!</p>
+      <p style="margin: 20px 0 0 0">Cảm ơn bạn!</p>
     </div>
   </body>
 </html>
